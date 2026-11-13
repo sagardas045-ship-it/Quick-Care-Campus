@@ -11,13 +11,16 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
+import { LayoutGroup, motion, useReducedMotion } from 'motion/react';
 import {
   Cross,
   LogOut,
   MapPin,
+  Moon,
   PackagePlus,
   Shield,
   Store,
+  Sun,
   UserCog,
 } from 'lucide-react';
 import {
@@ -57,6 +60,7 @@ const DEMO_ORDERS_KEY = 'qcc_demo_orders_v1';
 const DEMO_KITS_KEY = 'qcc_demo_kits_v1';
 const DEMO_FEEDBACK_KEY = 'qcc_demo_feedback_v1';
 const DEMO_PROFILE_PREFIX = 'qcc_demo_profile_v1_';
+const THEME_STORAGE_KEY = 'qcc_theme_pref_v2';
 
 type CustomerTab = 'order' | 'tracker';
 
@@ -78,7 +82,103 @@ function writeStorageJson(key: string, value: unknown): void {
   }
 }
 
+function getInitialDarkMode(): boolean {
+  try {
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === 'dark') return true;
+    if (saved === 'light') return false;
+  } catch {
+    // ignore storage access issues
+  }
+  return false;
+}
+
+function getCurfewHeaderTelemetry(): { isNightCurfew: boolean; pillLabel: string; subLabel: string } {
+  const hour = new Date().getHours();
+  const isNightCurfew = hour >= 22 || hour < 6;
+  return {
+    isNightCurfew,
+    pillLabel: isNightCurfew ? 'Night Curfew Live' : 'Curfew Express Ready',
+    subLabel: isNightCurfew ? '10 PM – 6 AM Active' : '24/7 Gate Dispatch',
+  };
+}
+
+const VALID_KIT_CATEGORIES = new Set([
+  'Fever & Cold',
+  'Headache & Migraine',
+  'Stomach & Acidity',
+  'First-Aid & Sprains',
+  'Hydration & Energy',
+  'Period & Cramp Care',
+  'Personal Hygiene & Masks',
+  'Sleep & Wellness',
+]);
+
+const LEGACY_CATEGORY_UPGRADES: Record<string, ReliefKit['category']> = {
+  'Fever & Flu': 'Fever & Cold',
+  'Headache & Acidity': 'Headache & Migraine',
+  'First-Aid': 'First-Aid & Sprains',
+  'Hydration & Cramps': 'Hydration & Energy',
+};
+
+function mergeCatalogWithDefaults(existingKits: ReliefKit[]): {
+  merged: ReliefKit[];
+  kitsToSync: ReliefKit[];
+} {
+  const existingById = new globalThis.Map<string, ReliefKit>();
+  existingKits.forEach((kit) => existingById.set(kit.id, kit));
+
+  const kitsToSync: ReliefKit[] = [];
+  const merged: ReliefKit[] = [];
+
+  for (const starter of RELIEF_KITS) {
+    const existing = existingById.get(starter.id);
+    if (!existing) {
+      merged.push(starter);
+      kitsToSync.push(starter);
+    } else {
+      const hasValidCategory = VALID_KIT_CATEGORIES.has(existing.category);
+      const needsStarterUpgrade =
+        !hasValidCategory ||
+        existing.name !== starter.name ||
+        existing.price !== starter.price ||
+        existing.category !== starter.category ||
+        existing.imagePath !== starter.imagePath;
+
+      const upgradedKit: ReliefKit = needsStarterUpgrade
+        ? {
+            ...starter,
+            inStock: existing.inStock,
+          }
+        : existing;
+      merged.push(upgradedKit);
+      if (needsStarterUpgrade) {
+        kitsToSync.push(upgradedKit);
+      }
+      existingById.delete(starter.id);
+    }
+  }
+
+  for (const customKit of existingById.values()) {
+    const mappedCategory =
+      LEGACY_CATEGORY_UPGRADES[customKit.category] ?? customKit.category;
+    const normalizedCustom: ReliefKit = VALID_KIT_CATEGORIES.has(mappedCategory)
+      ? { ...customKit, category: mappedCategory }
+      : { ...customKit, category: 'First-Aid & Sprains' };
+    merged.push(normalizedCustom);
+    if (normalizedCustom.category !== customKit.category) {
+      kitsToSync.push(normalizedCustom);
+    }
+  }
+
+  return { merged, kitsToSync };
+}
+
 export default function App() {
+  const reduceMotion = useReducedMotion();
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(getInitialDarkMode);
+  const [curfewTelemetry, setCurfewTelemetry] = useState(getCurfewHeaderTelemetry);
+
   const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
@@ -115,6 +215,29 @@ export default function App() {
   const isCampusAdmin =
     Boolean(currentUser?.emailVerified) &&
     currentUser?.email === CAMPUS_ADMIN_EMAIL;
+
+  // Apply adaptive dark/light mode to root document
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDarkMode);
+    document.documentElement.style.colorScheme = isDarkMode ? 'dark' : 'light';
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, isDarkMode ? 'dark' : 'light');
+    } catch {
+      // ignore storage errors
+    }
+  }, [isDarkMode]);
+
+  // Refresh curfew pulse indicator every minute
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setCurfewTelemetry(getCurfewHeaderTelemetry());
+    }, 60000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setIsDarkMode((prev) => !prev);
+  }, []);
 
   // Listen to Tier 1/2 Google Maps Platform quota events
   useEffect(() => {
@@ -181,6 +304,7 @@ export default function App() {
       collection(db, 'kits'),
       (snapshot) => {
         if (snapshot.empty) {
+          setKits(RELIEF_KITS);
           if (isCampusAdmin && !seededKitsRef.current) {
             seededKitsRef.current = true;
             for (const kit of RELIEF_KITS) {
@@ -196,21 +320,26 @@ export default function App() {
         }
 
         const loadedKits = snapshot.docs.map((d) => d.data() as ReliefKit);
-        const defaultOrder = RELIEF_KITS.map((k) => k.id);
-        loadedKits.sort((a, b) => {
-          const idxA = defaultOrder.indexOf(a.id);
-          const idxB = defaultOrder.indexOf(b.id);
-          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-          if (idxA !== -1) return -1;
-          if (idxB !== -1) return 1;
-          return a.name.localeCompare(b.name);
-        });
-        setKits(loadedKits);
+        const { merged, kitsToSync } = mergeCatalogWithDefaults(loadedKits);
+
+        if (isCampusAdmin && kitsToSync.length > 0 && !seededKitsRef.current) {
+          seededKitsRef.current = true;
+          for (const kit of kitsToSync) {
+            setDoc(doc(db, 'kits', kit.id), {
+              ...kit,
+              updatedAt: serverTimestamp(),
+            }).catch((err) =>
+              handleFirestoreError(err, OperationType.WRITE, `kits/${kit.id}`)
+            );
+          }
+        }
+
+        setKits(merged);
 
         setCart((prev) =>
           prev
             .map((item) => {
-              const latest = loadedKits.find((k) => k.id === item.kit.id);
+              const latest = merged.find((k) => k.id === item.kit.id);
               return latest ? { ...item, kit: latest } : item;
             })
             .filter((item) => item.kit.inStock)
@@ -279,7 +408,7 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser, profile, roleMode, isCampusAdmin]);
 
-  // Demo Session Entry Handler (used when domain is unauthorized or +91 Demo OTP is verified)
+  // Demo Session Entry Handler
   const handleEnterDemoSession = useCallback((session: DemoSession) => {
     setDemoSession(session);
     setRoleMode(session.role);
@@ -287,7 +416,9 @@ export default function App() {
     setEditingProfile(false);
 
     const savedKits = readStorageJson<ReliefKit[]>(DEMO_KITS_KEY, RELIEF_KITS);
-    setKits(savedKits);
+    const { merged } = mergeCatalogWithDefaults(savedKits);
+    writeStorageJson(DEMO_KITS_KEY, merged);
+    setKits(merged);
     const savedOrders = readStorageJson<CampusOrder[]>(DEMO_ORDERS_KEY, []);
     setOrders(savedOrders);
     const savedFeedback = readStorageJson<OrderFeedback[]>(DEMO_FEEDBACK_KEY, []);
@@ -488,6 +619,7 @@ export default function App() {
     } catch (error) {
       setSubmittingOrder(false);
       handleFirestoreError(error, OperationType.CREATE, orderPath);
+      return false;
     } finally {
       setSubmittingOrder(false);
     }
@@ -534,14 +666,14 @@ export default function App() {
   };
 
   const quotaBanner = quotaExceeded ? (
-    <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+    <div className="bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
       <span>
         Google Maps Platform quota reached. If you are the app owner, visit{' '}
         <a
           href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline font-semibold text-amber-950 hover:text-amber-800"
+          className="underline font-semibold text-amber-950 dark:text-amber-100 hover:text-amber-800"
         >
           maps developer site
         </a>{' '}
@@ -569,12 +701,12 @@ export default function App() {
   const renderContent = () => {
     if (!authReady || (currentUser && roleMode === 'student' && profileLoading)) {
       return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center p-6">
           <div className="text-center space-y-2">
             <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center mx-auto">
               <Cross className="w-5 h-5" />
             </div>
-            <p className="text-sm font-medium text-slate-600">
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
               Connecting Quick Care Campus...
             </p>
           </div>
@@ -588,50 +720,72 @@ export default function App() {
           onSelectRoleIntent={setRoleMode}
           onPrefillVerifiedPhone={setPrefilledPhone}
           onEnterDemoSession={handleEnterDemoSession}
+          isDarkMode={isDarkMode}
+          onToggleTheme={toggleTheme}
         />
       );
     }
 
-    // ADMIN & RUNNER MODE: Direct route to Operations Control Center (hides customer storefront)
+    // ADMIN & RUNNER MODE: Direct route to Operations Control Center
     if (roleMode === 'admin') {
       return (
-        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-          <header className="sticky top-0 z-30 h-14 bg-slate-900 text-white border-b border-slate-800">
+        <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+          <header className="sticky top-0 z-30 h-14 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-xl text-white border-b border-slate-800/80 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.55)]">
             <div className="max-w-5xl mx-auto h-full px-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 whitespace-nowrap">
-                <div className="w-8 h-8 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-teal-600 border-b-2 border-teal-800 text-white flex items-center justify-center shrink-0 shadow-sm">
                   <Shield className="w-4 h-4" />
                 </div>
                 <span className="text-sm sm:text-base font-bold tracking-tight">
                   Quick Care Ops
                 </span>
-                <span className="hidden sm:inline text-xs text-teal-300 font-medium">
-                  · Control Center
+                <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                  </span>
+                  <span>{curfewTelemetry.pillLabel}</span>
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <button
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <motion.button
                   type="button"
+                  whileTap={reduceMotion ? undefined : { scale: 0.92 }}
+                  onClick={toggleTheme}
+                  aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                  className="min-h-[38px] min-w-[38px] rounded-xl border border-slate-700 border-b-[3px] border-b-slate-950 bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center transition-colors"
+                >
+                  {isDarkMode ? (
+                    <Sun className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Moon className="w-4 h-4 text-teal-300" />
+                  )}
+                </motion.button>
+
+                <motion.button
+                  type="button"
+                  whileTap={reduceMotion ? undefined : { scale: 0.95 }}
                   onClick={() => {
                     setRoleMode('student');
                     setActiveTab('order');
                   }}
-                  className="min-h-[38px] px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-white flex items-center gap-1.5 whitespace-nowrap transition-colors"
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 border-b-[3px] border-b-slate-950 active:border-b active:translate-y-[1px] text-xs font-semibold text-white flex items-center gap-1.5 whitespace-nowrap transition-all"
                 >
                   <Store className="w-3.5 h-3.5 text-teal-400" />
                   <span>Student Store</span>
-                </button>
+                </motion.button>
 
-                <button
+                <motion.button
                   type="button"
+                  whileTap={reduceMotion ? undefined : { scale: 0.95 }}
                   onClick={() => void handleSignOut()}
                   aria-label="Sign out"
-                  className="min-h-[38px] px-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-rose-900/60 text-slate-200 text-xs font-semibold flex items-center gap-1.5"
+                  className="min-h-[38px] px-2.5 rounded-xl border border-slate-700 border-b-[3px] border-b-slate-950 bg-slate-800 hover:bg-rose-900/60 text-slate-200 text-xs font-semibold flex items-center gap-1.5"
                 >
                   <LogOut className="w-4 h-4" />
                   <span className="hidden sm:inline">Logout</span>
-                </button>
+                </motion.button>
               </div>
             </div>
           </header>
@@ -643,6 +797,7 @@ export default function App() {
               feedbackList={feedbackList}
               isCampusAdmin={isCampusAdmin}
               isDemoMode={isDemoMode}
+              isDarkMode={isDarkMode}
               onDemoUpdateOrder={handleDemoUpdateOrder}
               onLocalKitUpdate={handleLocalKitUpdate}
               onLocalKitAdd={handleLocalKitAdd}
@@ -660,6 +815,7 @@ export default function App() {
           existingProfile={profile}
           prefilledPhone={prefilledPhone}
           isDemoMode={isDemoMode}
+          isDarkMode={isDarkMode}
           onClose={profile ? () => setEditingProfile(false) : undefined}
           onSaved={(saved) => {
             setProfile(saved);
@@ -677,57 +833,86 @@ export default function App() {
     const activeCount = orders.filter((o) => o.status !== 'delivered').length;
 
     return (
-      <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-        {/* Top Student Header */}
-        <header className="sticky top-0 z-30 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200">
-          <div className="max-w-5xl mx-auto h-full px-4 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setActiveTab('order')}
-              className="flex items-center gap-2 text-left whitespace-nowrap shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-teal-600"
-            >
-              <div className="w-8 h-8 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0">
-                <Cross className="w-4 h-4 stroke-[2.5]" />
-              </div>
-              <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900">
-                Quick Care Campus
-              </span>
-            </button>
+      <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+        {/* Frosted Glassmorphism Student Top Header with Live Night Curfew Pulse Indicator */}
+        <header className="sticky top-0 z-30 h-14 bg-white/80 dark:bg-slate-950/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 shadow-[0_6px_20px_-10px_rgba(15,23,42,0.12)] dark:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.65)]">
+          <div className="max-w-5xl mx-auto h-full px-4 flex items-center justify-between gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('order')}
+                className="flex items-center gap-2 text-left whitespace-nowrap shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-teal-600"
+              >
+                <div className="w-8 h-8 rounded-xl bg-teal-600 border-b-2 border-teal-800 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Cross className="w-4 h-4 stroke-[2.5]" />
+                </div>
+                <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white">
+                  Quick Care Campus
+                </span>
+              </button>
 
-            <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-600 truncate max-w-xs">
-              <MapPin className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+              {/* Live Night Curfew Pulse Indicator */}
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 shrink-0">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <span>{curfewTelemetry.pillLabel}</span>
+              </span>
+            </div>
+
+            <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 truncate max-w-[220px]">
+              <MapPin className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400 shrink-0" />
               <span className="truncate font-medium">
                 {profile.hostelName} · Room {profile.roomNumber}
               </span>
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <button
+              <motion.button
                 type="button"
-                onClick={() => setRoleMode('admin')}
-                className="min-h-[38px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-slate-900 text-xs font-semibold text-slate-700 flex items-center gap-1 whitespace-nowrap transition-colors"
+                whileTap={reduceMotion ? undefined : { scale: 0.9 }}
+                onClick={toggleTheme}
+                aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Night Curfew Dark Mode'}
+                title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                className="min-h-[38px] min-w-[38px] rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all"
               >
-                <Shield className="w-3.5 h-3.5 text-teal-700" />
-                <span>Admin Ops</span>
-              </button>
+                {isDarkMode ? (
+                  <Sun className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <Moon className="w-4 h-4 text-teal-700" />
+                )}
+              </motion.button>
 
-              <button
+              <motion.button
                 type="button"
+                whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+                onClick={() => setRoleMode('admin')}
+                className="min-h-[38px] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:border-slate-900 dark:hover:border-teal-500 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1 whitespace-nowrap transition-all"
+              >
+                <Shield className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
+                <span className="hidden xs:inline sm:inline">Admin Ops</span>
+              </motion.button>
+
+              <motion.button
+                type="button"
+                whileTap={reduceMotion ? undefined : { scale: 0.9 }}
                 onClick={() => setEditingProfile(true)}
                 aria-label="Edit campus profile"
-                className="min-h-[38px] min-w-[38px] rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center"
+                className="min-h-[38px] min-w-[38px] rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all"
               >
                 <UserCog className="w-4 h-4" />
-              </button>
+              </motion.button>
 
-              <button
+              <motion.button
                 type="button"
+                whileTap={reduceMotion ? undefined : { scale: 0.9 }}
                 onClick={() => void handleSignOut()}
                 aria-label="Sign out"
-                className="min-h-[38px] min-w-[38px] rounded-lg border border-slate-200 bg-white hover:bg-rose-50 hover:text-rose-700 text-slate-700 flex items-center justify-center"
+                className="min-h-[38px] min-w-[38px] rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-700 dark:hover:text-rose-400 text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all"
               >
                 <LogOut className="w-4 h-4" />
-              </button>
+              </motion.button>
             </div>
           </div>
         </header>
@@ -735,17 +920,23 @@ export default function App() {
         {/* Main Student Workspace */}
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-4 pb-28 sm:pb-24 space-y-5">
           {/* Curfew Express Status Bar */}
-          <div className="rounded-2xl bg-slate-900 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
-            <div className="font-medium leading-relaxed">
-              <span className="text-amber-300 font-semibold">🌙 Curfew Express Active</span>
-              <span className="mx-1.5 text-slate-400">•</span>
-              <span className="text-teal-300 font-semibold">Delivery in ~16 mins</span>
-              <span className="mx-1.5 text-slate-400 hidden sm:inline">•</span>
-              <span className="hidden sm:inline text-slate-300">
+          <div className="rounded-2xl bg-white dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm shadow-xs">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium leading-relaxed">
+              <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 font-semibold">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <span>Curfew Express ({curfewTelemetry.subLabel})</span>
+              </span>
+              <span className="text-slate-400 dark:text-slate-500">•</span>
+              <span className="text-teal-700 dark:text-teal-300 font-semibold">Delivery in ~16 mins</span>
+              <span className="text-slate-400 dark:text-slate-500 hidden sm:inline">•</span>
+              <span className="hidden sm:inline text-slate-600 dark:text-slate-300">
                 Pin: {profile.hostelName}
               </span>
             </div>
-            <span className="text-[11px] font-mono text-slate-300">
+            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-300">
               {profile.phone}
             </span>
           </div>
@@ -768,6 +959,7 @@ export default function App() {
               onConfirmOrder={handleConfirmOrder}
               submitting={submittingOrder}
               formError={formError}
+              isDarkMode={isDarkMode}
             />
           )}
 
@@ -783,48 +975,85 @@ export default function App() {
               isDemoMode={isDemoMode}
               onDemoUpdateOrder={handleDemoUpdateOrder}
               onGoToOrder={() => setActiveTab('order')}
+              isDarkMode={isDarkMode}
             />
           )}
         </main>
 
-        {/* Fixed 2-Tab Student Bottom Navigation Bar */}
+        {/* Fixed Frosted Glassmorphism 2-Tab Student Bottom Navigation Bar with Sliding Active Pill */}
         <nav
           aria-label="Customer storefront navigation"
-          className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200"
+          className="fixed bottom-0 left-0 right-0 z-40 bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 shadow-[0_-8px_24px_-12px_rgba(15,23,42,0.14)] dark:shadow-[0_-12px_32px_-12px_rgba(0,0,0,0.65)]"
         >
-          <div className="max-w-5xl mx-auto grid grid-cols-2 h-16">
-            <button
-              type="button"
-              onClick={() => setActiveTab('order')}
-              aria-current={activeTab === 'order' ? 'page' : undefined}
-              className={`relative flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
-                activeTab === 'order'
-                  ? 'text-teal-700 border-t-2 border-teal-600 -mt-[1px]'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <PackagePlus className="w-5 h-5" />
-              <span className="text-xs font-semibold tracking-tight whitespace-nowrap">
-                Emergency Storefront
-              </span>
-            </button>
+          <LayoutGroup id="student-bottom-nav">
+            <div className="max-w-5xl mx-auto grid grid-cols-2 h-16 px-3 py-1.5 gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('order')}
+                aria-current={activeTab === 'order' ? 'page' : undefined}
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                  activeTab === 'order'
+                    ? 'text-teal-700 dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {activeTab === 'order' && (
+                  <motion.span
+                    layoutId="student-nav-pill"
+                    transition={
+                      reduceMotion
+                        ? { duration: 0 }
+                        : { type: 'spring', stiffness: 420, damping: 34 }
+                    }
+                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                  />
+                )}
+                <PackagePlus className="relative z-10 w-5 h-5" />
+                <span className="relative z-10 text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Emergency Storefront
+                </span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('tracker')}
-              aria-current={activeTab === 'tracker' ? 'page' : undefined}
-              className={`relative flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
-                activeTab === 'tracker'
-                  ? 'text-teal-700 border-t-2 border-teal-600 -mt-[1px]'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <MapPin className="w-5 h-5" />
-              <span className="text-xs font-semibold tracking-tight whitespace-nowrap">
-                Live Map Tracker ({activeCount})
-              </span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('tracker')}
+                aria-current={activeTab === 'tracker' ? 'page' : undefined}
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                  activeTab === 'tracker'
+                    ? 'text-teal-700 dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {activeTab === 'tracker' && (
+                  <motion.span
+                    layoutId="student-nav-pill"
+                    transition={
+                      reduceMotion
+                        ? { duration: 0 }
+                        : { type: 'spring', stiffness: 420, damping: 34 }
+                    }
+                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                  />
+                )}
+                <div className="relative z-10">
+                  <MapPin className="w-5 h-5" />
+                  {activeCount > 0 && (
+                    <motion.span
+                      key={activeCount}
+                      initial={reduceMotion ? false : { scale: 1.4 }}
+                      animate={reduceMotion ? undefined : { scale: 1 }}
+                      className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] rounded-full bg-teal-600 text-white text-[10px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
+                    >
+                      {activeCount}
+                    </motion.span>
+                  )}
+                </div>
+                <span className="relative z-10 text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Live Map Tracker
+                </span>
+              </button>
+            </div>
+          </LayoutGroup>
         </nav>
       </div>
     );

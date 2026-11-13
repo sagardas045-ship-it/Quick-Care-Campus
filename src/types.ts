@@ -2,10 +2,14 @@ import type { Timestamp } from 'firebase/firestore';
 
 export type SymptomCategory =
   | 'All Kits'
-  | 'Fever & Flu'
-  | 'Headache & Acidity'
-  | 'First-Aid'
-  | 'Hydration & Cramps';
+  | 'Fever & Cold'
+  | 'Headache & Migraine'
+  | 'Stomach & Acidity'
+  | 'First-Aid & Sprains'
+  | 'Hydration & Energy'
+  | 'Period & Cramp Care'
+  | 'Personal Hygiene & Masks'
+  | 'Sleep & Wellness';
 
 export type AppTab = 'order' | 'tracker' | 'operations';
 

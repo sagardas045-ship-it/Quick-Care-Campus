@@ -99,7 +99,19 @@
       "properties": {
         "id": { "type": "string", "minLength": 2, "maxLength": 64 },
         "name": { "type": "string", "minLength": 2, "maxLength": 120 },
-        "category": { "type": "string", "enum": ["Fever & Flu", "Headache & Acidity", "First-Aid", "Hydration & Cramps"] },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Fever & Cold",
+            "Headache & Migraine",
+            "Stomach & Acidity",
+            "First-Aid & Sprains",
+            "Hydration & Energy",
+            "Period & Cramp Care",
+            "Personal Hygiene & Masks",
+            "Sleep & Wellness"
+          ]
+        },
         "price": { "type": "number" },
         "contents": { "type": "array" },
         "reliefFor": { "type": "string", "minLength": 2, "maxLength": 200 },

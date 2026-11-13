@@ -129,7 +129,16 @@ service cloud.firestore {
         ]) &&
         data.id is string && data.id == kitId && data.id.size() <= 64 &&
         data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
-        data.category in ['Fever & Flu', 'Headache & Acidity', 'First-Aid', 'Hydration & Cramps'] &&
+        data.category in [
+          'Fever & Cold',
+          'Headache & Migraine',
+          'Stomach & Acidity',
+          'First-Aid & Sprains',
+          'Hydration & Energy',
+          'Period & Cramp Care',
+          'Personal Hygiene & Masks',
+          'Sleep & Wellness'
+        ] &&
         data.price is number && data.price >= 1 && data.price <= 10000 &&
         data.contents is list && data.contents.size() >= 1 && data.contents.size() <= 12 && data.contents[0] is string &&
         data.reliefFor is string && data.reliefFor.size() >= 2 && data.reliefFor.size() <= 200 &&
