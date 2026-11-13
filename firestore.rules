@@ -92,7 +92,7 @@ service cloud.firestore {
           'gateLat', 'gateLng', 'runnerName', 'runnerPhone', 'runnerLat', 'runnerLng',
           'items', 'subtotal', 'deliveryFee', 'wellnessPassAdded', 'totalPayable',
           'upiProvider', 'handoverPin', 'trackerStep', 'status', 'deliveryMinutes',
-          'createdAt', 'updatedAt'
+          'specialInstructions', 'createdAt', 'updatedAt'
         ]) &&
         data.id is string && data.id.size() >= 3 && data.id.size() <= 64 &&
         data.studentUid is string && data.studentUid.size() >= 1 && data.studentUid.size() <= 128 &&
@@ -114,6 +114,7 @@ service cloud.firestore {
         data.trackerStep is int && data.trackerStep >= 1 && data.trackerStep <= 4 &&
         data.status in ['queued', 'picked_up', 'gate_cleared', 'arrived', 'delivered'] &&
         data.deliveryMinutes is number && data.deliveryMinutes >= 0 && data.deliveryMinutes <= 180 &&
+        (!('specialInstructions' in data) || (data.specialInstructions is string && data.specialInstructions.size() <= 240)) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -166,6 +167,29 @@ service cloud.firestore {
         data.rating is int && data.rating >= 1 && data.rating <= 5 &&
         data.comment is string && data.comment.size() <= 300 &&
         data.createdAt is timestamp;
+    }
+
+    function isValidSharedTracker(data, orderId) {
+      return data.keys().hasAll([
+          'orderId', 'hostelName', 'gateLat', 'gateLng',
+          'runnerName', 'runnerLat', 'runnerLng', 'itemsSummary',
+          'trackerStep', 'status', 'deliveryMinutes', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'orderId', 'hostelName', 'gateLat', 'gateLng',
+          'runnerName', 'runnerLat', 'runnerLng', 'itemsSummary',
+          'trackerStep', 'status', 'deliveryMinutes', 'updatedAt'
+        ]) &&
+        data.orderId is string && data.orderId == orderId && data.orderId.size() >= 3 && data.orderId.size() <= 64 &&
+        data.hostelName is string && data.hostelName.size() >= 2 && data.hostelName.size() <= 120 &&
+        isValidCoord(data.gateLat, data.gateLng) &&
+        data.runnerName is string && data.runnerName.size() >= 2 && data.runnerName.size() <= 100 &&
+        isValidCoord(data.runnerLat, data.runnerLng) &&
+        data.itemsSummary is list && data.itemsSummary.size() >= 1 && data.itemsSummary.size() <= 10 && data.itemsSummary[0] is string &&
+        data.trackerStep is int && data.trackerStep >= 1 && data.trackerStep <= 4 &&
+        data.status in ['queued', 'picked_up', 'gate_cleared', 'arrived', 'delivered'] &&
+        data.deliveryMinutes is number && data.deliveryMinutes >= 0 && data.deliveryMinutes <= 180 &&
+        data.updatedAt is timestamp;
     }
 
     // Student campus profiles (strictly owner or admin read/write to protect PII)
@@ -258,6 +282,22 @@ service cloud.firestore {
         get(/databases/$(database)/documents/orders/$(orderId)).data.studentUid == request.auth.uid &&
         get(/databases/$(database)/documents/orders/$(orderId)).data.status == 'delivered';
       allow update: if false;
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // Sanitized roommate deep-link tracker snapshots (PII-free, single-document lookup only, no list)
+    match /sharedTrackers/{orderId} {
+      allow get: if isValidId(orderId);
+      allow list: if false;
+      allow create, update: if isVerifiedUser() &&
+        isValidId(orderId) &&
+        isValidSharedTracker(incoming(), orderId) &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/orders/$(orderId)) &&
+        (
+          get(/databases/$(database)/documents/orders/$(orderId)).data.studentUid == request.auth.uid ||
+          isRunnerOrAdmin()
+        );
       allow delete: if isAdmin() && isValidId(orderId);
     }
 

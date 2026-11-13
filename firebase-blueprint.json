@@ -62,6 +62,7 @@
         "trackerStep": { "type": "number", "enum": [1, 2, 3, 4] },
         "status": { "type": "string", "enum": ["queued", "picked_up", "gate_cleared", "arrived", "delivered"] },
         "deliveryMinutes": { "type": "number" },
+        "specialInstructions": { "type": "string", "minLength": 0, "maxLength": 240 },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -169,6 +170,39 @@
         "comment",
         "createdAt"
       ]
+    },
+    "SharedTracker": {
+      "title": "SharedTracker",
+      "description": "Sanitized, PII-free live delivery status snapshot for roommate deep-link tracking.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "minLength": 3, "maxLength": 64 },
+        "hostelName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "gateLat": { "type": "number" },
+        "gateLng": { "type": "number" },
+        "runnerName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "runnerLat": { "type": "number" },
+        "runnerLng": { "type": "number" },
+        "itemsSummary": { "type": "array" },
+        "trackerStep": { "type": "number", "enum": [1, 2, 3, 4] },
+        "status": { "type": "string", "enum": ["queued", "picked_up", "gate_cleared", "arrived", "delivered"] },
+        "deliveryMinutes": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "orderId",
+        "hostelName",
+        "gateLat",
+        "gateLng",
+        "runnerName",
+        "runnerLat",
+        "runnerLng",
+        "itemsSummary",
+        "trackerStep",
+        "status",
+        "deliveryMinutes",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -187,6 +221,10 @@
     "/feedback/{orderId}": {
       "schema": { "$ref": "#/entities/OrderFeedback" },
       "description": "Post-delivery student runner ratings (1-5 stars) and short comments keyed by orderId."
+    },
+    "/sharedTrackers/{orderId}": {
+      "schema": { "$ref": "#/entities/SharedTracker" },
+      "description": "Sanitized live delivery tracking snapshots accessible via shareable deep-links."
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/RoleRecord" },

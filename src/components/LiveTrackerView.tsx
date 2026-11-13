@@ -2,22 +2,28 @@ import { useEffect, useRef, useState } from 'react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
+  Bell,
+  BellRing,
+  Check,
   CheckCircle2,
   Clock,
   KeyRound,
   MapPin,
   MessageCircle,
+  PackageCheck,
   Pause,
   Play,
   Send,
   ShieldCheck,
   Star,
+  Truck,
   UserCheck,
   X,
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { CampusOrder, LatLngLiteral, OrderFeedback, OrderStatus } from '../types';
 import { LiveDeliveryMap } from './LiveDeliveryMap';
+import { syncSharedTrackerStatus } from '../utils/sharedTracker';
 
 interface LiveTrackerViewProps {
   activeOrder: CampusOrder | null;
@@ -27,6 +33,8 @@ interface LiveTrackerViewProps {
   onDemoUpdateOrder?: (orderId: string, patch: Partial<CampusOrder>) => void;
   onGoToOrder: () => void;
   isDarkMode?: boolean;
+  browserNotifStatus?: NotificationPermission | 'unsupported';
+  onRequestBrowserNotifications?: () => void;
 }
 
 const TRACKER_STEPS: {
@@ -78,6 +86,64 @@ const QUICK_PRAISE_TAGS = [
   'Smooth PIN handover',
 ];
 
+const DELIVERY_PROGRESS_STAGES = [
+  { key: 'queued', label: 'Queued', Icon: Clock },
+  { key: 'assigned', label: 'Runner Assigned', Icon: UserCheck },
+  { key: 'picked_up', label: 'Picked Up', Icon: PackageCheck },
+  { key: 'out_for_delivery', label: 'Out for Delivery', Icon: Truck },
+  { key: 'arrived', label: 'Arrived', Icon: MapPin },
+] as const;
+
+function getDeliveryProgressState(order: CampusOrder): {
+  activeIndex: number;
+  allDone: boolean;
+  progressPercent: number;
+  statusSummary: string;
+} {
+  switch (order.status) {
+    case 'delivered':
+      return {
+        activeIndex: 5,
+        allDone: true,
+        progressPercent: 100,
+        statusSummary: 'Delivered & PIN Verified',
+      };
+    case 'arrived':
+      return {
+        activeIndex: 4,
+        allDone: false,
+        progressPercent: 100,
+        statusSummary: `Arrived at ${order.hostelName}`,
+      };
+    case 'gate_cleared':
+      return {
+        activeIndex: 3,
+        allDone: false,
+        progressPercent: 75,
+        statusSummary: `${order.runnerName} is out for delivery`,
+      };
+    case 'picked_up':
+      return {
+        activeIndex: 2,
+        allDone: false,
+        progressPercent: 50,
+        statusSummary: `${order.runnerName} picked up your kit`,
+      };
+    case 'queued':
+    default: {
+      const hasRunner = Boolean(order.runnerName && order.runnerName.trim().length > 0);
+      return {
+        activeIndex: hasRunner ? 1 : 0,
+        allDone: false,
+        progressPercent: hasRunner ? 25 : 6,
+        statusSummary: hasRunner
+          ? `Runner Assigned: ${order.runnerName}`
+          : 'Order queued at 24/7 Pharmacy',
+      };
+    }
+  }
+}
+
 export function LiveTrackerView({
   activeOrder,
   existingFeedback,
@@ -86,6 +152,8 @@ export function LiveTrackerView({
   onDemoUpdateOrder,
   onGoToOrder,
   isDarkMode = false,
+  browserNotifStatus = 'default',
+  onRequestBrowserNotifications,
 }: LiveTrackerViewProps) {
   const reduceMotion = useReducedMotion();
   const [simulating, setSimulating] = useState(false);
@@ -180,7 +248,16 @@ export function LiveTrackerView({
         updateDoc(doc(db, 'orders', activeOrder.id), {
           ...patch,
           updatedAt: serverTimestamp(),
-        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, orderPath));
+        })
+          .then(() => {
+            syncSharedTrackerStatus(activeOrder.id, {
+              runnerLat: patch.runnerLat,
+              runnerLng: patch.runnerLng,
+              trackerStep: patch.trackerStep,
+              status: patch.status,
+            });
+          })
+          .catch((err) => handleFirestoreError(err, OperationType.UPDATE, orderPath));
       }
 
       if (nextIdx >= routePath.length - 1) {
@@ -273,29 +350,183 @@ export function LiveTrackerView({
           </h1>
         </div>
 
-        <motion.button
-          type="button"
-          whileTap={reduceMotion ? undefined : { scale: 0.95 }}
-          disabled={isArrivedOrDelivered}
-          onClick={() => setSimulating((prev) => !prev)}
-          className={`min-h-[44px] px-4 py-2 rounded-2xl text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap border-b-[3px] transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
-            isArrivedOrDelivered
-              ? 'bg-slate-200 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
-              : simulating
-              ? 'bg-amber-600 hover:bg-amber-500 border-amber-800 text-white shadow-sm'
-              : 'bg-teal-600 hover:bg-teal-500 border-teal-800 text-white shadow-[0_8px_18px_-6px_rgba(13,148,136,0.45)]'
-          }`}
-        >
-          {simulating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          <span>
-            {isArrivedOrDelivered
-              ? 'Runner at Hostel Gate'
-              : simulating
-              ? 'Pause Runner Simulation'
-              : 'Simulate Runner Movement'}
-          </span>
-        </motion.button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onRequestBrowserNotifications && (
+            <motion.button
+              type="button"
+              whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+              onClick={onRequestBrowserNotifications}
+              className={`min-h-[44px] px-3.5 py-2 rounded-2xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap border border-b-[3px] transition-all ${
+                browserNotifStatus === 'granted'
+                  ? 'border-teal-200 dark:border-teal-800 border-b-teal-300 dark:border-b-teal-950 bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300'
+                  : 'border-slate-200 dark:border-slate-700 border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-teal-500'
+              }`}
+            >
+              {browserNotifStatus === 'granted' ? (
+                <>
+                  <BellRing className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <span>Push Alerts On</span>
+                </>
+              ) : browserNotifStatus === 'denied' || browserNotifStatus === 'unsupported' ? (
+                <>
+                  <Bell className="w-4 h-4 text-slate-500" />
+                  <span>Toast Alerts On</span>
+                </>
+              ) : (
+                <>
+                  <Bell className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <span>Enable Push Alerts</span>
+                </>
+              )}
+            </motion.button>
+          )}
+
+          <motion.button
+            type="button"
+            whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+            disabled={isArrivedOrDelivered}
+            onClick={() => setSimulating((prev) => !prev)}
+            className={`min-h-[44px] px-4 py-2 rounded-2xl text-xs sm:text-sm font-semibold flex items-center gap-2 whitespace-nowrap border-b-[3px] transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
+              isArrivedOrDelivered
+                ? 'bg-slate-200 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                : simulating
+                ? 'bg-amber-600 hover:bg-amber-500 border-amber-800 text-white shadow-sm'
+                : 'bg-teal-600 hover:bg-teal-500 border-teal-800 text-white shadow-[0_8px_18px_-6px_rgba(13,148,136,0.45)]'
+            }`}
+          >
+            {simulating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            <span>
+              {isArrivedOrDelivered
+                ? 'Runner at Hostel Gate'
+                : simulating
+                ? 'Pause Runner Simulation'
+                : 'Simulate Runner Movement'}
+            </span>
+          </motion.button>
+        </div>
       </div>
+
+      {/* Visual Delivery Progress Stepper Bar */}
+      {(() => {
+        const progress = getDeliveryProgressState(activeOrder);
+        return (
+          <section
+            aria-label="Delivery Progress"
+            className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-[0_12px_28px_-18px_rgba(15,23,42,0.14)] dark:shadow-[0_14px_34px_-16px_rgba(0,0,0,0.65)] space-y-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                  Delivery Progress
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {progress.statusSummary}
+                </p>
+              </div>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-mono font-semibold tabular-nums ${
+                  progress.allDone || activeOrder.status === 'arrived'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-teal-50 dark:bg-teal-950/60 border-teal-200 dark:border-teal-800/70 text-teal-700 dark:text-teal-300'
+                }`}
+              >
+                {progress.allDone
+                  ? '5 / 5 · Delivered'
+                  : `Step ${progress.activeIndex + 1} / 5`}
+              </span>
+            </div>
+
+            <div className="relative pt-1">
+              {/* Background Track */}
+              <div
+                aria-hidden="true"
+                className="absolute top-[20px] sm:top-[24px] left-[10%] right-[10%] h-1 rounded-full bg-slate-200 dark:bg-slate-800"
+              />
+              {/* Active Animated Progress Track */}
+              <div
+                aria-hidden="true"
+                className="absolute top-[20px] sm:top-[24px] left-[10%] right-[10%] h-1 rounded-full overflow-hidden"
+              >
+                <motion.div
+                  initial={false}
+                  animate={{ width: `${progress.progressPercent}%` }}
+                  transition={
+                    reduceMotion
+                      ? { duration: 0 }
+                      : { type: 'spring', stiffness: 260, damping: 28 }
+                  }
+                  className={`h-full rounded-full ${
+                    progress.allDone || activeOrder.status === 'arrived'
+                      ? 'bg-emerald-500'
+                      : 'bg-teal-600 dark:bg-teal-500'
+                  }`}
+                />
+              </div>
+
+              <ol className="relative z-10 grid grid-cols-5 gap-1 sm:gap-2">
+                {DELIVERY_PROGRESS_STAGES.map((stage, idx) => {
+                  const isCompleted =
+                    progress.allDone || idx < progress.activeIndex;
+                  const isCurrent =
+                    !progress.allDone && idx === progress.activeIndex;
+                  const StageIcon = stage.Icon;
+
+                  return (
+                    <li
+                      key={stage.key}
+                      aria-current={isCurrent ? 'step' : undefined}
+                      className="flex flex-col items-center text-center gap-1.5 sm:gap-2"
+                    >
+                      <motion.div
+                        initial={false}
+                        animate={
+                          reduceMotion
+                            ? undefined
+                            : isCurrent
+                            ? { scale: 1.08 }
+                            : { scale: 1 }
+                        }
+                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                        className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          isCompleted
+                            ? activeOrder.status === 'delivered'
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                              : 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                            : isCurrent
+                            ? activeOrder.status === 'arrived'
+                              ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-600 dark:border-emerald-400 text-emerald-700 dark:text-emerald-300 ring-4 ring-emerald-500/20'
+                              : 'bg-teal-50 dark:bg-teal-950 border-teal-600 dark:border-teal-400 text-teal-700 dark:text-teal-300 ring-4 ring-teal-500/20'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'
+                        }`}
+                      >
+                        {isCompleted ? (
+                          <Check className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.75]" />
+                        ) : (
+                          <StageIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                        )}
+                      </motion.div>
+
+                      <span
+                        className={`text-[10px] sm:text-xs font-semibold leading-tight max-w-[78px] sm:max-w-none ${
+                          isCompleted
+                            ? 'text-slate-900 dark:text-slate-100'
+                            : isCurrent
+                            ? activeOrder.status === 'arrived'
+                              ? 'text-emerald-700 dark:text-emerald-300 font-bold'
+                              : 'text-teal-700 dark:text-teal-300 font-bold'
+                            : 'text-slate-400 dark:text-slate-500'
+                        }`}
+                      >
+                        {stage.label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Post-Delivery Runner Feedback System */}
       {activeOrder.status === 'delivered' && (

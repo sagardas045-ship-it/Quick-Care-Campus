@@ -13,7 +13,11 @@ import {
 } from 'firebase/firestore';
 import { LayoutGroup, motion, useReducedMotion } from 'motion/react';
 import {
+  Bell,
+  BellOff,
+  BellRing,
   Cross,
+  History,
   LogOut,
   MapPin,
   Moon,
@@ -37,6 +41,7 @@ import {
   DemoSession,
   LatLngLiteral,
   OrderFeedback,
+  OrderStatus,
   ReliefKit,
   StudentProfile,
   UpiProvider,
@@ -46,7 +51,15 @@ import { LoginScreen } from './components/LoginScreen';
 import { ProfileSetupModal } from './components/ProfileSetupModal';
 import { EmergencyOrderView } from './components/EmergencyOrderView';
 import { LiveTrackerView } from './components/LiveTrackerView';
+import { OrderHistoryView } from './components/OrderHistoryView';
+import { SharedTrackerView } from './components/SharedTrackerView';
 import { OperationsView } from './components/OperationsView';
+import { publishSharedTracker } from './utils/sharedTracker';
+import {
+  buildOrderStatusCopy,
+  OrderStatusNotification,
+  OrderStatusToastStack,
+} from './components/OrderStatusToastStack';
 
 const GOOGLE_MAPS_API_KEY =
   import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
@@ -62,7 +75,7 @@ const DEMO_FEEDBACK_KEY = 'qcc_demo_feedback_v1';
 const DEMO_PROFILE_PREFIX = 'qcc_demo_profile_v1_';
 const THEME_STORAGE_KEY = 'qcc_theme_pref_v2';
 
-type CustomerTab = 'order' | 'tracker';
+type CustomerTab = 'order' | 'tracker' | 'history';
 
 function readStorageJson<T>(key: string, fallback: T): T {
   try {
@@ -188,6 +201,11 @@ export default function App() {
   const [prefilledPhone, setPrefilledPhone] = useState<string | null>(null);
 
   const [quotaExceeded, setQuotaExceeded] = useState(false);
+  const [sharedTrackId, setSharedTrackId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const param = new URLSearchParams(window.location.search).get('track')?.trim();
+    return param || null;
+  });
   const [activeTab, setActiveTab] = useState<CustomerTab>('order');
   const [roleMode, setRoleMode] = useState<UserRoleMode>('student');
 
@@ -201,6 +219,7 @@ export default function App() {
   ]);
   const [orderPin, setOrderPin] = useState<LatLngLiteral>(PHARMACY_ORIGIN);
   const [roomNumber, setRoomNumber] = useState('');
+  const [specialInstructions, setSpecialInstructions] = useState('');
   const [wellnessPassAdded, setWellnessPassAdded] = useState(false);
   const [upiProvider, setUpiProvider] = useState<UpiProvider>('GPay');
   const [submittingOrder, setSubmittingOrder] = useState(false);
@@ -208,13 +227,207 @@ export default function App() {
 
   // Orders & Post-delivery Feedback state
   const [orders, setOrders] = useState<CampusOrder[]>([]);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
   const [feedbackList, setFeedbackList] = useState<OrderFeedback[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+
+  // Browser Push & Local Toast Notifications state
+  const [browserNotifStatus, setBrowserNotifStatus] = useState<
+    NotificationPermission | 'unsupported'
+  >(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      return 'unsupported';
+    }
+    return window.Notification.permission;
+  });
+  const [orderToasts, setOrderToasts] = useState<OrderStatusNotification[]>([]);
+  const ordersHydratedRef = useRef(false);
+  const prevOrderStatusMapRef = useRef<globalThis.Map<string, OrderStatus>>(
+    new globalThis.Map()
+  );
 
   const isDemoMode = Boolean(demoSession && !currentUser);
   const isCampusAdmin =
     Boolean(currentUser?.emailVerified) &&
     currentUser?.email === CAMPUS_ADMIN_EMAIL;
+
+  const dismissOrderToast = useCallback((toastId: string) => {
+    setOrderToasts((prev) => prev.filter((t) => t.id !== toastId));
+  }, []);
+
+  const pushLocalAndBrowserAlert = useCallback(
+    (order: CampusOrder) => {
+      const copy = buildOrderStatusCopy(order);
+      const toastId = `notif-${order.id}-${order.status}-${Date.now()}`;
+      const nowLabel = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      const toast: OrderStatusNotification = {
+        id: toastId,
+        orderId: order.id,
+        status: order.status,
+        stageLabel: copy.stageLabel,
+        title: copy.title,
+        message: copy.message,
+        timestampLabel: nowLabel,
+      };
+
+      setOrderToasts((prev) => [toast, ...prev].slice(0, 3));
+      window.setTimeout(() => {
+        setOrderToasts((prev) => prev.filter((t) => t.id !== toastId));
+      }, 6500);
+
+      if (
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        window.Notification.permission === 'granted'
+      ) {
+        try {
+          const browserNotif = new window.Notification(copy.title, {
+            body: copy.message,
+            tag: `qcc-${order.id}-${order.status}`,
+          });
+          browserNotif.onclick = () => {
+            window.focus();
+            setRoleMode('student');
+            setSelectedOrderId(order.id);
+            setActiveTab('tracker');
+            browserNotif.close();
+          };
+        } catch {
+          // Embedded iframe environments may restrict native Notification constructor; local toast remains active
+        }
+      }
+    },
+    []
+  );
+
+  const pushSystemToast = useCallback(
+    (stageLabel: string, title: string, message: string) => {
+      const toastId = `sys-${Date.now()}`;
+      const nowLabel = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const toast: OrderStatusNotification = {
+        id: toastId,
+        status: 'picked_up',
+        stageLabel,
+        title,
+        message,
+        timestampLabel: nowLabel,
+      };
+      setOrderToasts((prev) => [toast, ...prev].slice(0, 3));
+      window.setTimeout(() => {
+        setOrderToasts((prev) => prev.filter((t) => t.id !== toastId));
+      }, 5000);
+    },
+    []
+  );
+
+  const handleRequestBrowserNotifications = useCallback(async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setBrowserNotifStatus('unsupported');
+      pushSystemToast(
+        'In-App Alerts Active',
+        'Live Toast Notifications Active',
+        'Your browser does not support native push alerts. Live order status toasts will appear here.'
+      );
+      return;
+    }
+
+    if (window.Notification.permission === 'granted') {
+      setBrowserNotifStatus('granted');
+      pushSystemToast(
+        'Push Alerts Active',
+        'Browser & Toast Alerts Active',
+        'You will receive instant alerts for Runner Assigned, Picked Up, Out for Delivery, and Arrival.'
+      );
+      try {
+        new window.Notification('Quick Care Campus Alerts Active', {
+          body: 'You will receive browser push notifications as your runner picks up and delivers your order.',
+          tag: 'qcc-alerts-check',
+        });
+      } catch {
+        // ignore iframe notification block
+      }
+      return;
+    }
+
+    if (window.Notification.permission === 'denied') {
+      setBrowserNotifStatus('denied');
+      pushSystemToast(
+        'In-App Alerts Active',
+        'Browser Push Blocked — Using Local Toasts',
+        'Native browser alerts are blocked in site settings, so live status toasts will notify you in-app.'
+      );
+      return;
+    }
+
+    try {
+      const permission = await window.Notification.requestPermission();
+      setBrowserNotifStatus(permission);
+      if (permission === 'granted') {
+        pushSystemToast(
+          'Push Alerts Enabled',
+          'Browser Push Notifications Enabled',
+          'Live updates active for Runner Assigned, Picked Up, Out for Delivery, and Arrival.'
+        );
+        try {
+          new window.Notification('Quick Care Campus Alerts Enabled', {
+            body: 'Live updates active for Runner Assigned, Picked Up, Out for Delivery, and Arrival.',
+            tag: 'qcc-alerts-enabled',
+          });
+        } catch {
+          // ignore iframe block
+        }
+      } else {
+        pushSystemToast(
+          'In-App Alerts Active',
+          'In-App Toast Alerts Active',
+          'You will still receive real-time in-app toast notifications for every order milestone.'
+        );
+      }
+    } catch {
+      const fallback = window.Notification.permission;
+      setBrowserNotifStatus(fallback);
+      pushSystemToast(
+        'In-App Alerts Active',
+        'Live Toast Notifications Active',
+        'Order milestone updates will appear here in real time.'
+      );
+    }
+  }, [pushSystemToast]);
+
+  // Watch order creations and status transitions once initial snapshot is hydrated
+  useEffect(() => {
+    if (!ordersLoaded) return;
+
+    if (!ordersHydratedRef.current) {
+      const initialMap = new globalThis.Map<string, OrderStatus>();
+      for (const order of orders) {
+        initialMap.set(order.id, order.status);
+      }
+      prevOrderStatusMapRef.current = initialMap;
+      ordersHydratedRef.current = true;
+      return;
+    }
+
+    const prevMap = prevOrderStatusMapRef.current;
+    const nextMap = new globalThis.Map<string, OrderStatus>();
+
+    for (const order of orders) {
+      nextMap.set(order.id, order.status);
+      const previousStatus = prevMap.get(order.id);
+      if (!previousStatus || previousStatus !== order.status) {
+        pushLocalAndBrowserAlert(order);
+      }
+    }
+
+    prevOrderStatusMapRef.current = nextMap;
+  }, [orders, ordersLoaded, pushLocalAndBrowserAlert]);
 
   // Apply adaptive dark/light mode to root document
   useEffect(() => {
@@ -246,6 +459,31 @@ export default function App() {
     return () => window.removeEventListener('gmp-quota-exceeded', handler);
   }, []);
 
+  // Sync ?track=<orderId> URL parameter on browser Back/Forward
+  useEffect(() => {
+    const handlePopState = () => {
+      const param = new URLSearchParams(window.location.search).get('track')?.trim();
+      setSharedTrackId(param || null);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const openSharedTrackPreview = useCallback((orderId: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('track', orderId);
+    window.history.pushState({}, '', url.toString());
+    setSharedTrackId(orderId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const exitSharedTrackView = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('track');
+    window.history.replaceState({}, '', url.toString());
+    setSharedTrackId(null);
+  }, []);
+
   // Firebase Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -256,6 +494,10 @@ export default function App() {
       } else {
         setProfile(null);
         setOrders([]);
+        setOrdersLoaded(false);
+        ordersHydratedRef.current = false;
+        prevOrderStatusMapRef.current.clear();
+        setOrderToasts([]);
         setFeedbackList([]);
         setSelectedOrderId(null);
         setRoleMode('student');
@@ -374,6 +616,7 @@ export default function App() {
           return bMs - aMs;
         });
         setOrders(loaded);
+        setOrdersLoaded(true);
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, ordersPath);
@@ -420,7 +663,10 @@ export default function App() {
     writeStorageJson(DEMO_KITS_KEY, merged);
     setKits(merged);
     const savedOrders = readStorageJson<CampusOrder[]>(DEMO_ORDERS_KEY, []);
+    ordersHydratedRef.current = false;
+    prevOrderStatusMapRef.current.clear();
     setOrders(savedOrders);
+    setOrdersLoaded(true);
     const savedFeedback = readStorageJson<OrderFeedback[]>(DEMO_FEEDBACK_KEY, []);
     setFeedbackList(savedFeedback);
 
@@ -444,6 +690,10 @@ export default function App() {
     setDemoSession(null);
     setProfile(null);
     setOrders([]);
+    setOrdersLoaded(false);
+    ordersHydratedRef.current = false;
+    prevOrderStatusMapRef.current.clear();
+    setOrderToasts([]);
     setFeedbackList([]);
     setSelectedOrderId(null);
     setRoleMode('student');
@@ -460,6 +710,16 @@ export default function App() {
     }
     return orders.find((o) => o.status !== 'delivered') ?? orders[0];
   }, [orders, selectedOrderId]);
+
+  const lastCompletedOrder = useMemo(() => {
+    const delivered = orders.filter((o) => o.status === 'delivered');
+    if (delivered.length === 0) return null;
+    return [...delivered].sort((a, b) => {
+      const aMs = a.updatedAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0;
+      const bMs = b.updatedAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0;
+      return bMs - aMs;
+    })[0];
+  }, [orders]);
 
   const handleAddKit = (kit: ReliefKit) => {
     if (!kit.inStock) return;
@@ -484,6 +744,68 @@ export default function App() {
         )
         .filter((item) => item.quantity > 0)
     );
+  };
+
+  const handleReorderKits = (
+    order: CampusOrder,
+    options?: { stayOnStorefront?: boolean }
+  ) => {
+    setFormError(null);
+    const kitsById = new globalThis.Map<string, ReliefKit>();
+    kits.forEach((kit) => kitsById.set(kit.id, kit));
+
+    const availableEntries: CartItem[] = [];
+    const unavailableNames: string[] = [];
+
+    order.items.forEach((item) => {
+      const catalogKit = kitsById.get(item.kitId);
+      if (catalogKit && catalogKit.inStock) {
+        availableEntries.push({ kit: catalogKit, quantity: item.quantity });
+      } else {
+        unavailableNames.push(item.name);
+      }
+    });
+
+    if (availableEntries.length === 0) {
+      pushSystemToast(
+        'Catalog Notice',
+        'Kits Currently Out of Stock',
+        `Items from #${order.id} are temporarily out of stock at the pharmacy.`
+      );
+      return;
+    }
+
+    setCart((prev) => {
+      const next = [...prev];
+      availableEntries.forEach(({ kit, quantity }) => {
+        const idx = next.findIndex((c) => c.kit.id === kit.id);
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], kit, quantity: next[idx].quantity + quantity };
+        } else {
+          next.push({ kit, quantity });
+        }
+      });
+      return next;
+    });
+
+    if (!options?.stayOnStorefront) {
+      setActiveTab('order');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (unavailableNames.length > 0) {
+      pushSystemToast(
+        'Partial Reorder',
+        `Added Available Kits from #${order.id}`,
+        `Skipped out-of-stock item(s): ${unavailableNames.join(', ')}.`
+      );
+    } else {
+      pushSystemToast(
+        'Cart Updated',
+        `Reordered Kits from #${order.id}`,
+        `${availableEntries.length} kit line(s) added to your emergency cart.`
+      );
+    }
   };
 
   const handleLocalKitUpdate = (updatedKit: ReliefKit) => {
@@ -544,6 +866,7 @@ export default function App() {
     const orderId = `QCC-${Date.now().toString().slice(-4)}${suffix}`;
     const handoverPin = String(Math.floor(1000 + Math.random() * 9000));
     const runner = CAMPUS_RUNNERS[orders.length % CAMPUS_RUNNERS.length];
+    const cleanInstructions = specialInstructions.trim().slice(0, 240);
 
     const baseOrder: CampusOrder = {
       id: orderId,
@@ -573,6 +896,7 @@ export default function App() {
       trackerStep: 1,
       status: 'queued',
       deliveryMinutes: 16,
+      ...(cleanInstructions ? { specialInstructions: cleanInstructions } : {}),
     };
 
     if (isDemoMode) {
@@ -588,6 +912,7 @@ export default function App() {
 
       setSelectedOrderId(orderId);
       setCart([]);
+      setSpecialInstructions('');
       setWellnessPassAdded(false);
       setActiveTab('tracker');
       setSubmittingOrder(false);
@@ -603,6 +928,10 @@ export default function App() {
         updatedAt: serverTimestamp(),
       });
 
+      publishSharedTracker(baseOrder).catch(() => {
+        // Non-blocking best-effort sync for roommate deep-link tracking
+      });
+
       if (!profile.wellnessPassActive && wellnessPassAdded) {
         await updateDoc(doc(db, 'users', activeUid), {
           wellnessPassActive: true,
@@ -612,6 +941,7 @@ export default function App() {
 
       setSelectedOrderId(orderId);
       setCart([]);
+      setSpecialInstructions('');
       setWellnessPassAdded(false);
       setActiveTab('tracker');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -665,6 +995,18 @@ export default function App() {
     }
   };
 
+  const handlePublishShareTracker = useCallback(
+    async (order: CampusOrder): Promise<void> => {
+      if (isDemoMode || !currentUser) return;
+      try {
+        await publishSharedTracker(order);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `sharedTrackers/${order.id}`);
+      }
+    },
+    [isDemoMode, currentUser]
+  );
+
   const quotaBanner = quotaExceeded ? (
     <div className="bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
       <span>
@@ -699,6 +1041,24 @@ export default function App() {
     : null;
 
   const renderContent = () => {
+    if (sharedTrackId) {
+      return (
+        <SharedTrackerView
+          orderId={sharedTrackId}
+          hasOwnOrder={orders.some((o) => o.id === sharedTrackId)}
+          isDarkMode={isDarkMode}
+          onToggleTheme={toggleTheme}
+          onExitSharedView={exitSharedTrackView}
+          onOpenOwnTracker={() => {
+            setSelectedOrderId(sharedTrackId);
+            setRoleMode('student');
+            setActiveTab('tracker');
+            exitSharedTrackView();
+          }}
+        />
+      );
+    }
+
     if (!authReady || (currentUser && roleMode === 'student' && profileLoading)) {
       return (
         <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center p-6">
@@ -831,6 +1191,7 @@ export default function App() {
     }
 
     const activeCount = orders.filter((o) => o.status !== 'delivered').length;
+    const completedCount = orders.filter((o) => o.status === 'delivered').length;
 
     return (
       <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -869,6 +1230,39 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
+              <motion.button
+                type="button"
+                whileTap={reduceMotion ? undefined : { scale: 0.9 }}
+                onClick={() => void handleRequestBrowserNotifications()}
+                aria-label={
+                  browserNotifStatus === 'granted'
+                    ? 'Browser push notifications enabled'
+                    : browserNotifStatus === 'denied'
+                    ? 'Browser notifications blocked; using in-app toast alerts'
+                    : 'Enable browser order status notifications'
+                }
+                title={
+                  browserNotifStatus === 'granted'
+                    ? 'Browser Push Alerts On'
+                    : browserNotifStatus === 'denied'
+                    ? 'Browser alerts blocked — in-app toast alerts active'
+                    : 'Enable Browser Push Alerts'
+                }
+                className={`min-h-[38px] min-w-[38px] rounded-xl border border-b-[3px] flex items-center justify-center transition-all ${
+                  browserNotifStatus === 'granted'
+                    ? 'border-teal-200 dark:border-teal-700 border-b-teal-300 dark:border-b-teal-900 bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300'
+                    : 'border-slate-200 dark:border-slate-700 border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
+                }`}
+              >
+                {browserNotifStatus === 'granted' ? (
+                  <BellRing className="w-4 h-4" />
+                ) : browserNotifStatus === 'denied' || browserNotifStatus === 'unsupported' ? (
+                  <BellOff className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <Bell className="w-4 h-4" />
+                )}
+              </motion.button>
+
               <motion.button
                 type="button"
                 whileTap={reduceMotion ? undefined : { scale: 0.9 }}
@@ -952,6 +1346,8 @@ export default function App() {
               onChangeOrderPin={setOrderPin}
               roomNumber={roomNumber}
               onRoomNumberChange={setRoomNumber}
+              specialInstructions={specialInstructions}
+              onSpecialInstructionsChange={setSpecialInstructions}
               wellnessPassAdded={wellnessPassAdded}
               onToggleWellnessPass={() => setWellnessPassAdded((prev) => !prev)}
               upiProvider={upiProvider}
@@ -960,6 +1356,10 @@ export default function App() {
               submitting={submittingOrder}
               formError={formError}
               isDarkMode={isDarkMode}
+              lastCompletedOrder={lastCompletedOrder}
+              onReorderRecent={(order) =>
+                handleReorderKits(order, { stayOnStorefront: true })
+              }
             />
           )}
 
@@ -976,22 +1376,44 @@ export default function App() {
               onDemoUpdateOrder={handleDemoUpdateOrder}
               onGoToOrder={() => setActiveTab('order')}
               isDarkMode={isDarkMode}
+              browserNotifStatus={browserNotifStatus}
+              onRequestBrowserNotifications={handleRequestBrowserNotifications}
+            />
+          )}
+
+          {activeTab === 'history' && (
+            <OrderHistoryView
+              orders={orders}
+              feedbackList={feedbackList}
+              kits={kits}
+              onReorderKits={handleReorderKits}
+              onOpenInTracker={(orderId) => {
+                setSelectedOrderId(orderId);
+                setActiveTab('tracker');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onGoToOrder={() => {
+                setActiveTab('order');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onPublishShareTracker={handlePublishShareTracker}
+              onPreviewSharedLink={openSharedTrackPreview}
             />
           )}
         </main>
 
-        {/* Fixed Frosted Glassmorphism 2-Tab Student Bottom Navigation Bar with Sliding Active Pill */}
+        {/* Fixed Frosted Glassmorphism 3-Tab Student Bottom Navigation Bar with Sliding Active Pill */}
         <nav
           aria-label="Customer storefront navigation"
           className="fixed bottom-0 left-0 right-0 z-40 bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 shadow-[0_-8px_24px_-12px_rgba(15,23,42,0.14)] dark:shadow-[0_-12px_32px_-12px_rgba(0,0,0,0.65)]"
         >
           <LayoutGroup id="student-bottom-nav">
-            <div className="max-w-5xl mx-auto grid grid-cols-2 h-16 px-3 py-1.5 gap-2">
+            <div className="max-w-5xl mx-auto grid grid-cols-3 h-16 px-2 sm:px-3 py-1.5 gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => setActiveTab('order')}
                 aria-current={activeTab === 'order' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 sm:px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
                   activeTab === 'order'
                     ? 'text-teal-700 dark:text-teal-300'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1009,8 +1431,8 @@ export default function App() {
                   />
                 )}
                 <PackagePlus className="relative z-10 w-5 h-5" />
-                <span className="relative z-10 text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Emergency Storefront
+                <span className="relative z-10 text-[11px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Storefront
                 </span>
               </button>
 
@@ -1018,7 +1440,7 @@ export default function App() {
                 type="button"
                 onClick={() => setActiveTab('tracker')}
                 aria-current={activeTab === 'tracker' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 sm:px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
                   activeTab === 'tracker'
                     ? 'text-teal-700 dark:text-teal-300'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1048,8 +1470,47 @@ export default function App() {
                     </motion.span>
                   )}
                 </div>
-                <span className="relative z-10 text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Live Map Tracker
+                <span className="relative z-10 text-[11px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Live Tracker
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('history')}
+                aria-current={activeTab === 'history' ? 'page' : undefined}
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 sm:px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                  activeTab === 'history'
+                    ? 'text-teal-700 dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {activeTab === 'history' && (
+                  <motion.span
+                    layoutId="student-nav-pill"
+                    transition={
+                      reduceMotion
+                        ? { duration: 0 }
+                        : { type: 'spring', stiffness: 420, damping: 34 }
+                    }
+                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                  />
+                )}
+                <div className="relative z-10">
+                  <History className="w-5 h-5" />
+                  {completedCount > 0 && (
+                    <motion.span
+                      key={completedCount}
+                      initial={reduceMotion ? false : { scale: 1.3 }}
+                      animate={reduceMotion ? undefined : { scale: 1 }}
+                      className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] rounded-full bg-emerald-600 text-white text-[10px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
+                    >
+                      {completedCount}
+                    </motion.span>
+                  )}
+                </div>
+                <span className="relative z-10 text-[11px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Order History
                 </span>
               </button>
             </div>
@@ -1067,6 +1528,15 @@ export default function App() {
       region="IN"
     >
       {quotaBanner}
+      <OrderStatusToastStack
+        toasts={orderToasts}
+        onDismiss={dismissOrderToast}
+        onTrackOrder={(orderId) => {
+          setRoleMode('student');
+          setSelectedOrderId(orderId);
+          setActiveTab('tracker');
+        }}
+      />
       {renderContent()}
     </APIProvider>
   );

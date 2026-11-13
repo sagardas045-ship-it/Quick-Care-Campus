@@ -28,6 +28,8 @@ interface CheckoutFormProps {
   onChangeOrderPin: (coords: LatLngLiteral) => void;
   roomNumber: string;
   onRoomNumberChange: (room: string) => void;
+  specialInstructions: string;
+  onSpecialInstructionsChange: (notes: string) => void;
   wellnessPassAdded: boolean;
   onToggleWellnessPass: () => void;
   upiProvider: UpiProvider;
@@ -52,6 +54,8 @@ export function CheckoutForm({
   onChangeOrderPin,
   roomNumber,
   onRoomNumberChange,
+  specialInstructions,
+  onSpecialInstructionsChange,
   wellnessPassAdded,
   onToggleWellnessPass,
   upiProvider,
@@ -169,6 +173,29 @@ export function CheckoutForm({
             value={roomNumber}
             onChange={(e) => onRoomNumberChange(e.target.value)}
             className="w-full min-h-[40px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label
+              htmlFor="checkout-special-instructions"
+              className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400"
+            >
+              Special Instructions <span className="font-normal text-slate-400 dark:text-slate-500">(Optional)</span>
+            </label>
+            <span className="text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500">
+              {specialInstructions.length}/240
+            </span>
+          </div>
+          <textarea
+            id="checkout-special-instructions"
+            rows={2}
+            maxLength={240}
+            value={specialInstructions}
+            onChange={(e) => onSpecialInstructionsChange(e.target.value.slice(0, 240))}
+            placeholder='e.g., "Leave at security gate" or "Call upon arrival"'
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none resize-none"
           />
         </div>
 

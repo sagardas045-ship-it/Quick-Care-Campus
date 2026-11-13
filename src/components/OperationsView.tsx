@@ -15,6 +15,7 @@ import {
   IndianRupee,
   KeyRound,
   MapPin,
+  MessageSquareText,
   Package,
   PackageCheck,
   Plus,
@@ -37,6 +38,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { CampusOrder, OrderFeedback, ReliefKit, SymptomCategory } from '../types';
 import { KitImage } from './KitImage';
+import { syncSharedTrackerStatus } from '../utils/sharedTracker';
 
 interface OperationsViewProps {
   orders: CampusOrder[];
@@ -165,6 +167,13 @@ export function OperationsView({
       await updateDoc(doc(db, 'orders', order.id), {
         ...patch,
         updatedAt: serverTimestamp(),
+      });
+      syncSharedTrackerStatus(order.id, {
+        status: nextStatus,
+        trackerStep: nextStep,
+        runnerLat: patch.runnerLat,
+        runnerLng: patch.runnerLng,
+        deliveryMinutes: patch.deliveryMinutes,
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, orderPath);
@@ -477,6 +486,16 @@ export function OperationsView({
                           <span aria-hidden="true">·</span>
                           <span>Runner: {order.runnerName}</span>
                         </div>
+
+                        {order.specialInstructions && (
+                          <div className="mt-1.5 rounded-xl border border-teal-200 dark:border-teal-800/70 bg-teal-50/70 dark:bg-teal-950/40 px-3 py-2 flex items-start gap-2 text-xs text-teal-950 dark:text-teal-100">
+                            <MessageSquareText className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400 shrink-0 mt-0.5" />
+                            <div className="leading-snug">
+                              <span className="font-semibold">Special Instructions: </span>
+                              <span>{order.specialInstructions}</span>
+                            </div>
+                          </div>
+                        )}
 
                         {order.status === 'delivered' && (() => {
                           const orderFeedback = feedbackList.find((f) => f.orderId === order.id);
@@ -1131,6 +1150,16 @@ export function OperationsView({
                   {mapModalOrder.gateLat.toFixed(5)}, {mapModalOrder.gateLng.toFixed(5)}
                 </span>
               </div>
+
+              {mapModalOrder.specialInstructions && (
+                <div className="rounded-xl border border-teal-200 dark:border-teal-800/70 bg-teal-50/70 dark:bg-teal-950/40 px-3 py-2 flex items-start gap-2 text-xs text-teal-950 dark:text-teal-100">
+                  <MessageSquareText className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">Special Instructions: </span>
+                    <span>{mapModalOrder.specialInstructions}</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

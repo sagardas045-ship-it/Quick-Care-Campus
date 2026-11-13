@@ -29,3 +29,37 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #qcc-printable-receipt,
+  #qcc-printable-receipt * {
+    visibility: visible !important;
+  }
+
+  #qcc-printable-receipt {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}

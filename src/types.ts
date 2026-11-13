@@ -101,6 +101,7 @@ export interface CampusOrder {
   trackerStep: 1 | 2 | 3 | 4;
   status: OrderStatus;
   deliveryMinutes: number;
+  specialInstructions?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -114,4 +115,19 @@ export interface OrderFeedback {
   rating: number;
   comment: string;
   createdAt?: Timestamp;
+}
+
+export interface SharedTracker {
+  orderId: string;
+  hostelName: string;
+  gateLat: number;
+  gateLng: number;
+  runnerName: string;
+  runnerLat: number;
+  runnerLng: number;
+  itemsSummary: string[];
+  trackerStep: 1 | 2 | 3 | 4;
+  status: OrderStatus;
+  deliveryMinutes: number;
+  updatedAt?: Timestamp;
 }

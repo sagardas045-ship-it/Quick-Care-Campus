@@ -7,6 +7,7 @@ import {
   MapPin,
   Minus,
   Plus,
+  RotateCcw,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -19,6 +20,7 @@ import {
   WELLNESS_PASS_PRICE,
 } from '../data/campusData';
 import {
+  CampusOrder,
   CartItem,
   LatLngLiteral,
   ReliefKit,
@@ -39,6 +41,8 @@ interface EmergencyOrderViewProps {
   onChangeOrderPin: (coords: LatLngLiteral) => void;
   roomNumber: string;
   onRoomNumberChange: (room: string) => void;
+  specialInstructions: string;
+  onSpecialInstructionsChange: (notes: string) => void;
   wellnessPassAdded: boolean;
   onToggleWellnessPass: () => void;
   upiProvider: UpiProvider;
@@ -47,6 +51,8 @@ interface EmergencyOrderViewProps {
   submitting: boolean;
   formError: string | null;
   isDarkMode?: boolean;
+  lastCompletedOrder?: CampusOrder | null;
+  onReorderRecent?: (order: CampusOrder) => void;
 }
 
 function getCurfewStatus(): {
@@ -97,6 +103,8 @@ export function EmergencyOrderView({
   onChangeOrderPin,
   roomNumber,
   onRoomNumberChange,
+  specialInstructions,
+  onSpecialInstructionsChange,
   wellnessPassAdded,
   onToggleWellnessPass,
   upiProvider,
@@ -105,12 +113,15 @@ export function EmergencyOrderView({
   submitting,
   formError,
   isDarkMode = false,
+  lastCompletedOrder = null,
+  onReorderRecent,
 }: EmergencyOrderViewProps) {
   const [selectedSymptom, setSelectedSymptom] =
     useState<SymptomCategory>('All Kits');
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [flyingBadge, setFlyingBadge] = useState<{ key: number; label: string } | null>(null);
+  const [reorderedFeedback, setReorderedFeedback] = useState(false);
   const [curfewClock, setCurfewClock] = useState(() => getCurfewStatus());
   const shouldReduceMotion = useReducedMotion();
 
@@ -126,6 +137,42 @@ export function EmergencyOrderView({
     const t = window.setTimeout(() => setFlyingBadge(null), 1100);
     return () => window.clearTimeout(t);
   }, [flyingBadge]);
+
+  useEffect(() => {
+    if (!reorderedFeedback) return;
+    const t = window.setTimeout(() => setReorderedFeedback(false), 1800);
+    return () => window.clearTimeout(t);
+  }, [reorderedFeedback]);
+
+  const recentOrderMeta = useMemo(() => {
+    if (!lastCompletedOrder) return null;
+    const kitsById = new globalThis.Map<string, ReliefKit>();
+    kits.forEach((kit) => kitsById.set(kit.id, kit));
+
+    let availableUnits = 0;
+    let availablePrice = 0;
+    const availableNames: string[] = [];
+
+    lastCompletedOrder.items.forEach((item) => {
+      const catalogKit = kitsById.get(item.kitId);
+      if (catalogKit && catalogKit.inStock) {
+        availableUnits += item.quantity;
+        availablePrice += catalogKit.price * item.quantity;
+        availableNames.push(`${item.quantity}× ${catalogKit.name}`);
+      }
+    });
+
+    return {
+      order: lastCompletedOrder,
+      availableUnits,
+      availablePrice,
+      availableNames,
+      summaryTitle:
+        availableNames.length > 0
+          ? `Reorder #${lastCompletedOrder.id}: ${availableNames.join(', ')}`
+          : `Items from #${lastCompletedOrder.id} are currently out of stock`,
+    };
+  }, [kits, lastCompletedOrder]);
 
   const filteredKits = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -249,27 +296,80 @@ export function EmergencyOrderView({
             </p>
           </div>
 
-          {/* Instant Live Symptom & Product Search Bar */}
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search symptoms (fever, acidity, spray, pads)..."
-              aria-label="Search OTC kits and symptoms"
-              className="w-full min-h-[44px] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md pl-10 pr-9 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-xs focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                aria-label="Clear search query"
-                className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[32px] min-w-[32px] rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
+            {/* One-Click Reorder Recent Button */}
+            <motion.button
+              type="button"
+              whileTap={
+                shouldReduceMotion ||
+                !recentOrderMeta ||
+                recentOrderMeta.availableUnits === 0
+                  ? undefined
+                  : { scale: 0.96, y: 1 }
+              }
+              disabled={
+                !recentOrderMeta ||
+                recentOrderMeta.availableUnits === 0 ||
+                !onReorderRecent
+              }
+              onClick={() => {
+                if (!recentOrderMeta || !onReorderRecent) return;
+                onReorderRecent(recentOrderMeta.order);
+                setReorderedFeedback(true);
+              }}
+              title={
+                recentOrderMeta
+                  ? recentOrderMeta.summaryTitle
+                  : 'Available after your first delivered order'
+              }
+              className={`min-h-[44px] px-3.5 py-2 rounded-2xl border text-xs sm:text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                reorderedFeedback
+                  ? 'bg-emerald-600 text-white border-emerald-700 border-b-[3px] border-b-emerald-800 shadow-sm'
+                  : recentOrderMeta && recentOrderMeta.availableUnits > 0
+                  ? 'bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100/80 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 border-teal-300 dark:border-teal-700 border-b-[3px] border-b-teal-500 active:border-b active:translate-y-[1px] shadow-xs'
+                  : 'bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+              }`}
+            >
+              {reorderedFeedback ? (
+                <>
+                  <Check className="w-4 h-4 shrink-0" />
+                  <span>Added to Cart</span>
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4 shrink-0" />
+                  <span>Reorder Recent</span>
+                  {recentOrderMeta && recentOrderMeta.availableUnits > 0 && (
+                    <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-lg bg-teal-600/12 dark:bg-teal-400/15 text-teal-800 dark:text-teal-200 tabular-nums">
+                      {recentOrderMeta.availableUnits} · ₹{recentOrderMeta.availablePrice}
+                    </span>
+                  )}
+                </>
+              )}
+            </motion.button>
+
+            {/* Instant Live Symptom & Product Search Bar */}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search symptoms (fever, acidity, pads)..."
+                aria-label="Search OTC kits and symptoms"
+                className="w-full min-h-[44px] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md pl-10 pr-9 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-xs focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search query"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[32px] min-w-[32px] rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -514,6 +614,8 @@ export function EmergencyOrderView({
             onChangeOrderPin={onChangeOrderPin}
             roomNumber={roomNumber}
             onRoomNumberChange={onRoomNumberChange}
+            specialInstructions={specialInstructions}
+            onSpecialInstructionsChange={onSpecialInstructionsChange}
             wellnessPassAdded={wellnessPassAdded}
             onToggleWellnessPass={onToggleWellnessPass}
             upiProvider={upiProvider}
@@ -645,6 +747,8 @@ export function EmergencyOrderView({
                   onChangeOrderPin={onChangeOrderPin}
                   roomNumber={roomNumber}
                   onRoomNumberChange={onRoomNumberChange}
+                  specialInstructions={specialInstructions}
+                  onSpecialInstructionsChange={onSpecialInstructionsChange}
                   wellnessPassAdded={wellnessPassAdded}
                   onToggleWellnessPass={onToggleWellnessPass}
                   upiProvider={upiProvider}
