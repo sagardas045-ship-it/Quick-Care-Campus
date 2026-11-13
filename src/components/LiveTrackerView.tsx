@@ -19,6 +19,8 @@ import { LiveDeliveryMap } from './LiveDeliveryMap';
 
 interface LiveTrackerViewProps {
   activeOrder: CampusOrder | null;
+  isDemoMode?: boolean;
+  onDemoUpdateOrder?: (orderId: string, patch: Partial<CampusOrder>) => void;
   onGoToOrder: () => void;
 }
 
@@ -56,7 +58,12 @@ function formatCountdown(totalSeconds: number): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export function LiveTrackerView({ activeOrder, onGoToOrder }: LiveTrackerViewProps) {
+export function LiveTrackerView({
+  activeOrder,
+  isDemoMode = false,
+  onDemoUpdateOrder,
+  onGoToOrder,
+}: LiveTrackerViewProps) {
   const [simulating, setSimulating] = useState(false);
   const [routePath, setRoutePath] = useState<LatLngLiteral[]>([]);
   const [totalDistMeters, setTotalDistMeters] = useState(1800);
@@ -124,14 +131,22 @@ export function LiveTrackerView({ activeOrder, onGoToOrder }: LiveTrackerViewPro
 
       setSecondsRemaining(Math.max(0, Math.round(1200 * (1 - progress))));
 
-      const orderPath = `orders/${activeOrder.id}`;
-      updateDoc(doc(db, 'orders', activeOrder.id), {
+      const patch: Partial<CampusOrder> = {
         runnerLat: Number(point.lat.toFixed(6)),
         runnerLng: Number(point.lng.toFixed(6)),
         trackerStep: nextStep,
         status: nextStatus,
-        updatedAt: serverTimestamp(),
-      }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, orderPath));
+      };
+
+      if (isDemoMode && onDemoUpdateOrder) {
+        onDemoUpdateOrder(activeOrder.id, patch);
+      } else {
+        const orderPath = `orders/${activeOrder.id}`;
+        updateDoc(doc(db, 'orders', activeOrder.id), {
+          ...patch,
+          updatedAt: serverTimestamp(),
+        }).catch((err) => handleFirestoreError(err, OperationType.UPDATE, orderPath));
+      }
 
       if (nextIdx >= routePath.length - 1) {
         setSimulating(false);
@@ -139,7 +154,15 @@ export function LiveTrackerView({ activeOrder, onGoToOrder }: LiveTrackerViewPro
     }, 1400);
 
     return () => window.clearInterval(interval);
-  }, [simulating, activeOrder?.id, activeOrder?.status, activeOrder?.trackerStep, routePath]);
+  }, [
+    simulating,
+    isDemoMode,
+    onDemoUpdateOrder,
+    activeOrder?.id,
+    activeOrder?.status,
+    activeOrder?.trackerStep,
+    routePath,
+  ]);
 
   if (!activeOrder) {
     return (

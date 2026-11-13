@@ -38,6 +38,8 @@ interface OperationsViewProps {
   orders: CampusOrder[];
   kits: ReliefKit[];
   isCampusAdmin: boolean;
+  isDemoMode?: boolean;
+  onDemoUpdateOrder?: (orderId: string, patch: Partial<CampusOrder>) => void;
   onLocalKitUpdate?: (updatedKit: ReliefKit) => void;
   onLocalKitAdd?: (newKit: ReliefKit) => void;
 }
@@ -64,6 +66,8 @@ export function OperationsView({
   orders,
   kits,
   isCampusAdmin,
+  isDemoMode = false,
+  onDemoUpdateOrder,
   onLocalKitUpdate,
   onLocalKitAdd,
 }: OperationsViewProps) {
@@ -123,13 +127,23 @@ export function OperationsView({
     const runnerLng =
       PHARMACY_ORIGIN.lng + (order.gateLng - PHARMACY_ORIGIN.lng) * progressFactor;
 
+    const patch: Partial<CampusOrder> = {
+      status: nextStatus,
+      trackerStep: nextStep,
+      runnerLat: Number(runnerLat.toFixed(6)),
+      runnerLng: Number(runnerLng.toFixed(6)),
+      deliveryMinutes: nextStatus === 'delivered' ? 16 : order.deliveryMinutes,
+    };
+
+    if (isDemoMode && onDemoUpdateOrder) {
+      onDemoUpdateOrder(order.id, patch);
+      setUpdatingOrderId(null);
+      return;
+    }
+
     try {
       await updateDoc(doc(db, 'orders', order.id), {
-        status: nextStatus,
-        trackerStep: nextStep,
-        runnerLat: Number(runnerLat.toFixed(6)),
-        runnerLng: Number(runnerLng.toFixed(6)),
-        deliveryMinutes: nextStatus === 'delivered' ? 16 : order.deliveryMinutes,
+        ...patch,
         updatedAt: serverTimestamp(),
       });
     } catch (err) {
@@ -353,7 +367,9 @@ export function OperationsView({
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-950 flex items-start gap-2.5">
           <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
           <span>
-            Signed in via Demo Passcode with a non-admin email. You can dispatch and PIN-verify orders you created, view all KPIs, and preview inventory toggles locally. Sign in with the authorized admin account for campus-wide Firestore order queues and persistent catalog writes.
+            {isDemoMode
+              ? 'Demo Operations Mode active — incoming orders, 4-digit PIN handovers, and catalog inventory toggles are synced locally in this browser session.'
+              : 'Signed in via Demo Passcode with a non-admin email. You can dispatch and PIN-verify orders you created, view all KPIs, and preview inventory toggles locally.'}
           </span>
         </div>
       )}

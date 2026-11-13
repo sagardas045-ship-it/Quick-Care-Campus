@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { User } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { CheckCircle2, PhoneCall, ShieldCheck, X } from 'lucide-react';
 import { DEHRADUN_HOSTEL_PRESETS } from '../data/campusData';
@@ -7,10 +6,18 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { LatLngLiteral, StudentProfile } from '../types';
 import { HostelPinPickerMap } from './HostelPinPickerMap';
 
+interface AuthLikeUser {
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  phoneNumber: string | null;
+}
+
 interface ProfileSetupModalProps {
-  user: User;
+  user: AuthLikeUser;
   existingProfile: StudentProfile | null;
   prefilledPhone?: string | null;
+  isDemoMode?: boolean;
   onClose?: () => void;
   onSaved: (profile: StudentProfile) => void;
 }
@@ -19,6 +26,7 @@ export function ProfileSetupModal({
   user,
   existingProfile,
   prefilledPhone,
+  isDemoMode = false,
   onClose,
   onSaved,
 }: ProfileSetupModalProps) {
@@ -66,7 +74,7 @@ export function ProfileSetupModal({
       setOtpSent(false);
       setErrorMsg(null);
     } else {
-      setErrorMsg('Invalid OTP code. Enter demo code 2407 to verify.');
+      setErrorMsg('Invalid OTP code. Enter demo code 123456 or 2407 to verify.');
     }
   };
 
@@ -97,7 +105,7 @@ export function ProfileSetupModal({
     setErrorMsg(null);
 
     const formattedPhone = `+91${cleanDigits}`;
-    const profilePayload = {
+    const savedProfile: StudentProfile = {
       uid: user.uid,
       displayName: (user.displayName || `Student ${cleanDigits.slice(-4)}`).slice(0, 100),
       email: (user.email || '').slice(0, 150),
@@ -109,6 +117,16 @@ export function ProfileSetupModal({
       gateLat: Number(pin.lat.toFixed(6)),
       gateLng: Number(pin.lng.toFixed(6)),
       wellnessPassActive: existingProfile?.wellnessPassActive ?? false,
+    };
+
+    if (isDemoMode) {
+      onSaved(savedProfile);
+      setSaving(false);
+      return;
+    }
+
+    const profilePayload = {
+      ...savedProfile,
       createdAt: existingProfile?.createdAt ?? serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -118,19 +136,7 @@ export function ProfileSetupModal({
       await setDoc(doc(db, 'users', user.uid), profilePayload, {
         merge: Boolean(existingProfile),
       });
-      onSaved({
-        uid: profilePayload.uid,
-        displayName: profilePayload.displayName,
-        email: profilePayload.email,
-        phone: profilePayload.phone,
-        phoneVerified: true,
-        hostelName: profilePayload.hostelName,
-        roomNumber: profilePayload.roomNumber,
-        emergencyContactName: profilePayload.emergencyContactName,
-        gateLat: profilePayload.gateLat,
-        gateLng: profilePayload.gateLng,
-        wellnessPassActive: profilePayload.wellnessPassActive,
-      });
+      onSaved(savedProfile);
     } catch (err) {
       setSaving(false);
       handleFirestoreError(err, OperationType.WRITE, userPath);

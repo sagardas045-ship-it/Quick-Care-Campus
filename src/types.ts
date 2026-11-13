@@ -11,6 +11,14 @@ export type AppTab = 'order' | 'tracker' | 'operations';
 
 export type UserRoleMode = 'student' | 'admin';
 
+export interface DemoSession {
+  role: UserRoleMode;
+  uid: string;
+  displayName: string;
+  email: string;
+  phone?: string;
+}
+
 export type UpiProvider = 'GPay' | 'PhonePe' | 'Paytm';
 
 export interface LatLngLiteral {

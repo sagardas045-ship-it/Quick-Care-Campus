@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { APIProvider } from '@vis.gl/react-google-maps';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import {
@@ -31,6 +31,7 @@ import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import {
   CampusOrder,
   CartItem,
+  DemoSession,
   LatLngLiteral,
   ReliefKit,
   StudentProfile,
@@ -51,11 +52,34 @@ const GOOGLE_MAPS_API_KEY =
 
 const CAMPUS_ADMIN_EMAIL = 'sagardas045@gmail.com';
 
+const DEMO_ORDERS_KEY = 'qcc_demo_orders_v1';
+const DEMO_KITS_KEY = 'qcc_demo_kits_v1';
+const DEMO_PROFILE_PREFIX = 'qcc_demo_profile_v1_';
+
 type CustomerTab = 'order' | 'tracker';
+
+function readStorageJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStorageJson(key: string, value: unknown): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore storage quota errors
+  }
+}
 
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -65,7 +89,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<CustomerTab>('order');
   const [roleMode, setRoleMode] = useState<UserRoleMode>('student');
 
-  // OTC Kits Catalog (synced with Firestore `kits` collection)
+  // OTC Kits Catalog (synced with Firestore `kits` collection or Demo storage)
   const [kits, setKits] = useState<ReliefKit[]>(RELIEF_KITS);
   const seededKitsRef = useRef(false);
 
@@ -80,10 +104,11 @@ export default function App() {
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Firestore Orders state
+  // Orders state
   const [orders, setOrders] = useState<CampusOrder[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
+  const isDemoMode = Boolean(demoSession && !currentUser);
   const isCampusAdmin =
     Boolean(currentUser?.emailVerified) &&
     currentUser?.email === CAMPUS_ADMIN_EMAIL;
@@ -100,7 +125,9 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setAuthReady(true);
-      if (!user) {
+      if (user) {
+        setDemoSession(null);
+      } else {
         setProfile(null);
         setOrders([]);
         setSelectedOrderId(null);
@@ -176,7 +203,6 @@ export default function App() {
         });
         setKits(loadedKits);
 
-        // Keep cart items aligned with live stock status & prices
         setCart((prev) =>
           prev
             .map((item) => {
@@ -224,6 +250,45 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser, profile, roleMode, isCampusAdmin]);
 
+  // Demo Session Entry Handler (used when domain is unauthorized or +91 Demo OTP is verified)
+  const handleEnterDemoSession = useCallback((session: DemoSession) => {
+    setDemoSession(session);
+    setRoleMode(session.role);
+    setActiveTab('order');
+    setEditingProfile(false);
+
+    const savedKits = readStorageJson<ReliefKit[]>(DEMO_KITS_KEY, RELIEF_KITS);
+    setKits(savedKits);
+    const savedOrders = readStorageJson<CampusOrder[]>(DEMO_ORDERS_KEY, []);
+    setOrders(savedOrders);
+
+    const savedProfile = readStorageJson<StudentProfile | null>(
+      `${DEMO_PROFILE_PREFIX}${session.uid}`,
+      null
+    );
+    if (savedProfile) {
+      setProfile(savedProfile);
+      setOrderPin({ lat: savedProfile.gateLat, lng: savedProfile.gateLng });
+      setRoomNumber(savedProfile.roomNumber);
+    } else {
+      setProfile(null);
+    }
+  }, []);
+
+  const handleSignOut = async () => {
+    if (currentUser) {
+      await signOut(auth);
+    }
+    setDemoSession(null);
+    setProfile(null);
+    setOrders([]);
+    setSelectedOrderId(null);
+    setRoleMode('student');
+    setActiveTab('order');
+    setPrefilledPhone(null);
+    setEditingProfile(false);
+  };
+
   const activeOrder = useMemo(() => {
     if (orders.length === 0) return null;
     if (selectedOrderId) {
@@ -259,7 +324,11 @@ export default function App() {
   };
 
   const handleLocalKitUpdate = (updatedKit: ReliefKit) => {
-    setKits((prev) => prev.map((k) => (k.id === updatedKit.id ? updatedKit : k)));
+    setKits((prev) => {
+      const next = prev.map((k) => (k.id === updatedKit.id ? updatedKit : k));
+      if (isDemoMode) writeStorageJson(DEMO_KITS_KEY, next);
+      return next;
+    });
     setCart((prev) =>
       prev
         .map((item) => (item.kit.id === updatedKit.id ? { ...item, kit: updatedKit } : item))
@@ -268,11 +337,28 @@ export default function App() {
   };
 
   const handleLocalKitAdd = (newKit: ReliefKit) => {
-    setKits((prev) => [...prev, newKit]);
+    setKits((prev) => {
+      const next = [...prev, newKit];
+      if (isDemoMode) writeStorageJson(DEMO_KITS_KEY, next);
+      return next;
+    });
   };
 
+  const handleDemoUpdateOrder = useCallback(
+    (orderId: string, patch: Partial<CampusOrder>) => {
+      setOrders((prev) => {
+        const next = prev.map((o) => (o.id === orderId ? { ...o, ...patch } : o));
+        writeStorageJson(DEMO_ORDERS_KEY, next);
+        return next;
+      });
+    },
+    []
+  );
+
   const handleConfirmOrder = async (): Promise<boolean> => {
-    if (!currentUser || !profile) return false;
+    const activeUid = currentUser?.uid ?? demoSession?.uid;
+    if (!activeUid || !profile) return false;
+
     if (cart.length === 0) {
       setFormError('Please add at least one OTC relief kit before dispatching.');
       return false;
@@ -296,9 +382,9 @@ export default function App() {
     const handoverPin = String(Math.floor(1000 + Math.random() * 9000));
     const runner = CAMPUS_RUNNERS[orders.length % CAMPUS_RUNNERS.length];
 
-    const newOrderPayload = {
+    const baseOrder: CampusOrder = {
       id: orderId,
-      studentUid: currentUser.uid,
+      studentUid: activeUid,
       studentName: profile.displayName.slice(0, 100),
       studentPhone: profile.phone,
       hostelName: profile.hostelName.slice(0, 120),
@@ -321,19 +407,41 @@ export default function App() {
       totalPayable,
       upiProvider,
       handoverPin,
-      trackerStep: 1 as const,
-      status: 'queued' as const,
+      trackerStep: 1,
+      status: 'queued',
       deliveryMinutes: 16,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
     };
+
+    if (isDemoMode) {
+      const nextOrders = [baseOrder, ...orders];
+      setOrders(nextOrders);
+      writeStorageJson(DEMO_ORDERS_KEY, nextOrders);
+
+      if (!profile.wellnessPassActive && wellnessPassAdded) {
+        const updatedProfile = { ...profile, wellnessPassActive: true };
+        setProfile(updatedProfile);
+        writeStorageJson(`${DEMO_PROFILE_PREFIX}${activeUid}`, updatedProfile);
+      }
+
+      setSelectedOrderId(orderId);
+      setCart([]);
+      setWellnessPassAdded(false);
+      setActiveTab('tracker');
+      setSubmittingOrder(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
+    }
 
     const orderPath = `orders/${orderId}`;
     try {
-      await setDoc(doc(db, 'orders', orderId), newOrderPayload);
+      await setDoc(doc(db, 'orders', orderId), {
+        ...baseOrder,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
 
       if (!profile.wellnessPassActive && wellnessPassAdded) {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
+        await updateDoc(doc(db, 'users', activeUid), {
           wellnessPassActive: true,
           updatedAt: serverTimestamp(),
         });
@@ -370,6 +478,22 @@ export default function App() {
     </div>
   ) : null;
 
+  const activeAuthUser = currentUser
+    ? {
+        uid: currentUser.uid,
+        displayName: currentUser.displayName,
+        email: currentUser.email,
+        phoneNumber: currentUser.phoneNumber,
+      }
+    : demoSession
+    ? {
+        uid: demoSession.uid,
+        displayName: demoSession.displayName,
+        email: demoSession.email || null,
+        phoneNumber: demoSession.phone || null,
+      }
+    : null;
+
   const renderContent = () => {
     if (!authReady || (currentUser && roleMode === 'student' && profileLoading)) {
       return (
@@ -386,11 +510,12 @@ export default function App() {
       );
     }
 
-    if (!currentUser) {
+    if (!activeAuthUser) {
       return (
         <LoginScreen
           onSelectRoleIntent={setRoleMode}
           onPrefillVerifiedPhone={setPrefilledPhone}
+          onEnterDemoSession={handleEnterDemoSession}
         />
       );
     }
@@ -428,7 +553,7 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => void signOut(auth)}
+                  onClick={() => void handleSignOut()}
                   aria-label="Sign out"
                   className="min-h-[38px] px-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-rose-900/60 text-slate-200 text-xs font-semibold flex items-center gap-1.5"
                 >
@@ -444,6 +569,8 @@ export default function App() {
               orders={orders}
               kits={kits}
               isCampusAdmin={isCampusAdmin}
+              isDemoMode={isDemoMode}
+              onDemoUpdateOrder={handleDemoUpdateOrder}
               onLocalKitUpdate={handleLocalKitUpdate}
               onLocalKitAdd={handleLocalKitAdd}
             />
@@ -456,15 +583,19 @@ export default function App() {
     if (!profile || editingProfile) {
       return (
         <ProfileSetupModal
-          user={currentUser}
+          user={activeAuthUser}
           existingProfile={profile}
           prefilledPhone={prefilledPhone}
+          isDemoMode={isDemoMode}
           onClose={profile ? () => setEditingProfile(false) : undefined}
           onSaved={(saved) => {
             setProfile(saved);
             setOrderPin({ lat: saved.gateLat, lng: saved.gateLng });
             setRoomNumber(saved.roomNumber);
             setEditingProfile(false);
+            if (isDemoMode) {
+              writeStorageJson(`${DEMO_PROFILE_PREFIX}${activeAuthUser.uid}`, saved);
+            }
           }}
         />
       );
@@ -518,7 +649,7 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => void signOut(auth)}
+                onClick={() => void handleSignOut()}
                 aria-label="Sign out"
                 className="min-h-[38px] min-w-[38px] rounded-lg border border-slate-200 bg-white hover:bg-rose-50 hover:text-rose-700 text-slate-700 flex items-center justify-center"
               >
@@ -570,6 +701,8 @@ export default function App() {
           {activeTab === 'tracker' && (
             <LiveTrackerView
               activeOrder={activeOrder}
+              isDemoMode={isDemoMode}
+              onDemoUpdateOrder={handleDemoUpdateOrder}
               onGoToOrder={() => setActiveTab('order')}
             />
           )}
