@@ -23,7 +23,10 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.phone_number != null
+      );
     }
 
     function isOwner(userId) {
@@ -64,7 +67,7 @@ service cloud.firestore {
         ]) &&
         data.uid is string && data.uid == userId && data.uid.size() <= 128 &&
         data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
-        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        data.email is string && data.email.size() <= 150 &&
         isValidPhone(data.phone) &&
         data.phoneVerified is bool &&
         data.hostelName is string && data.hostelName.size() >= 2 && data.hostelName.size() <= 120 &&
@@ -112,6 +115,28 @@ service cloud.firestore {
         data.status in ['queued', 'picked_up', 'gate_cleared', 'arrived', 'delivered'] &&
         data.deliveryMinutes is number && data.deliveryMinutes >= 0 && data.deliveryMinutes <= 180 &&
         data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidKit(data, kitId) {
+      return data.keys().hasAll([
+          'id', 'name', 'category', 'price', 'contents',
+          'reliefFor', 'imagePath', 'etaMinutes', 'sealedCode', 'inStock', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'name', 'category', 'price', 'contents',
+          'reliefFor', 'imagePath', 'etaMinutes', 'sealedCode', 'inStock', 'updatedAt'
+        ]) &&
+        data.id is string && data.id == kitId && data.id.size() <= 64 &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+        data.category in ['Fever & Flu', 'Headache & Acidity', 'First-Aid', 'Hydration & Cramps'] &&
+        data.price is number && data.price >= 1 && data.price <= 10000 &&
+        data.contents is list && data.contents.size() >= 1 && data.contents.size() <= 12 && data.contents[0] is string &&
+        data.reliefFor is string && data.reliefFor.size() >= 2 && data.reliefFor.size() <= 200 &&
+        data.imagePath is string && data.imagePath.size() <= 300 &&
+        data.etaMinutes is number && data.etaMinutes >= 1 && data.etaMinutes <= 120 &&
+        data.sealedCode is string && data.sealedCode.size() >= 2 && data.sealedCode.size() <= 32 &&
+        data.inStock is bool &&
         data.updatedAt is timestamp;
     }
 
@@ -177,6 +202,16 @@ service cloud.firestore {
           )
         );
       allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // OTC Catalog Inventory (customers can read; only admins can manage inventory)
+    match /kits/{kitId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isAdmin() &&
+        isValidId(kitId) &&
+        isValidKit(incoming(), kitId) &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(kitId);
     }
 
     // Role registries

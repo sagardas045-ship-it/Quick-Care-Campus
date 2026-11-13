@@ -9,7 +9,7 @@ export type SymptomCategory =
 
 export type AppTab = 'order' | 'tracker' | 'operations';
 
-export type UserRoleMode = 'student' | 'runner';
+export type UserRoleMode = 'student' | 'admin';
 
 export type UpiProvider = 'GPay' | 'PhonePe' | 'Paytm';
 
@@ -28,6 +28,7 @@ export interface ReliefKit {
   imagePath: string;
   etaMinutes: number;
   sealedCode: string;
+  inStock: boolean;
 }
 
 export interface CartItem {

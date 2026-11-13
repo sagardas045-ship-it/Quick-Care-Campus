@@ -10,6 +10,7 @@ import { HostelPinPickerMap } from './HostelPinPickerMap';
 interface ProfileSetupModalProps {
   user: User;
   existingProfile: StudentProfile | null;
+  prefilledPhone?: string | null;
   onClose?: () => void;
   onSaved: (profile: StudentProfile) => void;
 }
@@ -17,15 +18,19 @@ interface ProfileSetupModalProps {
 export function ProfileSetupModal({
   user,
   existingProfile,
+  prefilledPhone,
   onClose,
   onSaved,
 }: ProfileSetupModalProps) {
-  const initialDigits = existingProfile?.phone
-    ? existingProfile.phone.replace(/^\+91/, '')
-    : '';
+  const rawInitialPhone =
+    existingProfile?.phone || user.phoneNumber || prefilledPhone || '';
+  const initialDigits = rawInitialPhone.replace(/^\+91/, '').replace(/\D/g, '').slice(0, 10);
+  const alreadyPhoneVerified = Boolean(
+    existingProfile?.phoneVerified || user.phoneNumber || prefilledPhone
+  );
 
   const [phoneDigits, setPhoneDigits] = useState(initialDigits);
-  const [phoneVerified, setPhoneVerified] = useState(existingProfile?.phoneVerified ?? false);
+  const [phoneVerified, setPhoneVerified] = useState(alreadyPhoneVerified);
   const [otpSent, setOtpSent] = useState(false);
   const [otpInput, setOtpInput] = useState('');
   const [hostelName, setHostelName] = useState(
@@ -56,12 +61,12 @@ export function ProfileSetupModal({
   };
 
   const handleVerifyOtp = () => {
-    if (otpInput.trim() === '2407') {
+    if (otpInput.trim() === '2407' || otpInput.trim() === '123456') {
       setPhoneVerified(true);
       setOtpSent(false);
       setErrorMsg(null);
     } else {
-      setErrorMsg('Invalid OTP code. Enter the 4-digit demo verification code 2407.');
+      setErrorMsg('Invalid OTP code. Enter demo code 2407 to verify.');
     }
   };
 
@@ -94,8 +99,8 @@ export function ProfileSetupModal({
     const formattedPhone = `+91${cleanDigits}`;
     const profilePayload = {
       uid: user.uid,
-      displayName: (user.displayName || 'Campus Student').slice(0, 100),
-      email: (user.email || 'student@campus.edu').slice(0, 150),
+      displayName: (user.displayName || `Student ${cleanDigits.slice(-4)}`).slice(0, 100),
+      email: (user.email || '').slice(0, 150),
       phone: formattedPhone,
       phoneVerified: true,
       hostelName: hostelName.trim().slice(0, 120),
@@ -159,18 +164,17 @@ export function ProfileSetupModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-5">
-          {/* Authenticated Google Summary */}
           <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3.5 flex items-center justify-between gap-3">
             <div>
-              <div className="text-xs text-slate-500">Signed in with Google</div>
+              <div className="text-xs text-slate-500">Authenticated Student</div>
               <div className="text-sm font-bold text-slate-900">
-                {user.displayName || 'Student'} · {user.email}
+                {user.displayName || 'Campus Student'}{' '}
+                {user.email ? `· ${user.email}` : user.phoneNumber ? `· ${user.phoneNumber}` : ''}
               </div>
             </div>
             <ShieldCheck className="w-5 h-5 text-teal-600 shrink-0" />
           </div>
 
-          {/* 10-Digit +91 Mobile Number + OTP Verification */}
           <div className="space-y-2.5">
             <label htmlFor="indian-mobile" className="block text-xs font-semibold text-slate-700">
               10-Digit Indian Mobile / WhatsApp Number (+91)
@@ -217,16 +221,16 @@ export function ProfileSetupModal({
             {otpSent && !phoneVerified && (
               <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-3.5 space-y-2.5">
                 <div className="text-xs text-teal-950">
-                  Enter the 4-digit WhatsApp verification code (Demo OTP:{' '}
+                  Enter verification code (Demo OTP:{' '}
                   <span className="font-mono font-bold">2407</span>)
                 </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     inputMode="numeric"
-                    maxLength={4}
+                    maxLength={6}
                     value={otpInput}
-                    onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="2407"
                     className="w-32 min-h-[44px] rounded-xl border border-teal-300 bg-white px-3 text-center font-mono text-sm font-bold tracking-widest text-slate-900 focus:outline-none focus:border-teal-600"
                   />
@@ -242,10 +246,9 @@ export function ProfileSetupModal({
             )}
           </div>
 
-          {/* Hostel / PG Selector & Custom Input */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-slate-700">
-              Dehradun Hostel / PG Cluster
+              Dehradun Hostel Block / PG Cluster
             </span>
             <div className="flex flex-wrap gap-1.5">
               {DEHRADUN_HOSTEL_PRESETS.map((preset) => (
@@ -275,7 +278,6 @@ export function ProfileSetupModal({
             />
           </div>
 
-          {/* Room Number & Emergency Contact */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="setup-room" className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -306,7 +308,6 @@ export function ProfileSetupModal({
             </div>
           </div>
 
-          {/* Drop Hostel Gate Pin on Google Map */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-slate-700">
               Pin Your Hostel Gate Handover Location
@@ -323,7 +324,7 @@ export function ProfileSetupModal({
           <button
             type="submit"
             disabled={saving}
-            className="w-full min-h-[52px] rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-slate-400 text-white text-sm font-semibold px-4 py-3 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
+            className="w-full min-h-[52px] rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-slate-400 text-white text-sm font-semibold px-4 py-3 transition-colors"
           >
             {saving
               ? 'Saving Campus Profile...'

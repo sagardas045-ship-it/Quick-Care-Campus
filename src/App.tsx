@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { APIProvider } from '@vis.gl/react-google-maps';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import {
@@ -12,12 +12,12 @@ import {
   where,
 } from 'firebase/firestore';
 import {
-  ClipboardList,
   Cross,
   LogOut,
   MapPin,
   PackagePlus,
   Shield,
+  Store,
   UserCog,
 } from 'lucide-react';
 import {
@@ -29,7 +29,6 @@ import {
 } from './data/campusData';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import {
-  AppTab,
   CampusOrder,
   CartItem,
   LatLngLiteral,
@@ -52,16 +51,23 @@ const GOOGLE_MAPS_API_KEY =
 
 const CAMPUS_ADMIN_EMAIL = 'sagardas045@gmail.com';
 
+type CustomerTab = 'order' | 'tracker';
+
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
+  const [prefilledPhone, setPrefilledPhone] = useState<string | null>(null);
 
   const [quotaExceeded, setQuotaExceeded] = useState(false);
-  const [activeTab, setActiveTab] = useState<AppTab>('order');
+  const [activeTab, setActiveTab] = useState<CustomerTab>('order');
   const [roleMode, setRoleMode] = useState<UserRoleMode>('student');
+
+  // OTC Kits Catalog (synced with Firestore `kits` collection)
+  const [kits, setKits] = useState<ReliefKit[]>(RELIEF_KITS);
+  const seededKitsRef = useRef(false);
 
   // Ordering state
   const [cart, setCart] = useState<CartItem[]>([
@@ -99,6 +105,10 @@ export default function App() {
         setOrders([]);
         setSelectedOrderId(null);
         setRoleMode('student');
+        setActiveTab('order');
+        setPrefilledPhone(null);
+        setKits(RELIEF_KITS);
+        seededKitsRef.current = false;
       }
     });
     return () => unsubscribe();
@@ -131,13 +141,67 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser]);
 
+  // Firestore OTC Kits Catalog listener (kits collection)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const kitsPath = 'kits';
+    const unsubscribe = onSnapshot(
+      collection(db, 'kits'),
+      (snapshot) => {
+        if (snapshot.empty) {
+          if (isCampusAdmin && !seededKitsRef.current) {
+            seededKitsRef.current = true;
+            for (const kit of RELIEF_KITS) {
+              setDoc(doc(db, 'kits', kit.id), {
+                ...kit,
+                updatedAt: serverTimestamp(),
+              }).catch((err) =>
+                handleFirestoreError(err, OperationType.CREATE, `kits/${kit.id}`)
+              );
+            }
+          }
+          return;
+        }
+
+        const loadedKits = snapshot.docs.map((d) => d.data() as ReliefKit);
+        const defaultOrder = RELIEF_KITS.map((k) => k.id);
+        loadedKits.sort((a, b) => {
+          const idxA = defaultOrder.indexOf(a.id);
+          const idxB = defaultOrder.indexOf(b.id);
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+          if (idxA !== -1) return -1;
+          if (idxB !== -1) return 1;
+          return a.name.localeCompare(b.name);
+        });
+        setKits(loadedKits);
+
+        // Keep cart items aligned with live stock status & prices
+        setCart((prev) =>
+          prev
+            .map((item) => {
+              const latest = loadedKits.find((k) => k.id === item.kit.id);
+              return latest ? { ...item, kit: latest } : item;
+            })
+            .filter((item) => item.kit.inStock)
+        );
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, kitsPath);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser, isCampusAdmin]);
+
   // Firestore Orders listener (orders collection)
   useEffect(() => {
-    if (!currentUser || !profile) return;
+    if (!currentUser) return;
+    if (roleMode === 'student' && !profile) return;
 
     const ordersPath = 'orders';
     const ordersQuery =
-      roleMode === 'runner' && isCampusAdmin
+      roleMode === 'admin' && isCampusAdmin
         ? query(collection(db, 'orders'))
         : query(collection(db, 'orders'), where('studentUid', '==', currentUser.uid));
 
@@ -170,6 +234,7 @@ export default function App() {
   }, [orders, selectedOrderId]);
 
   const handleAddKit = (kit: ReliefKit) => {
+    if (!kit.inStock) return;
     setFormError(null);
     setCart((prev) => {
       const existing = prev.find((item) => item.kit.id === kit.id);
@@ -191,6 +256,19 @@ export default function App() {
         )
         .filter((item) => item.quantity > 0)
     );
+  };
+
+  const handleLocalKitUpdate = (updatedKit: ReliefKit) => {
+    setKits((prev) => prev.map((k) => (k.id === updatedKit.id ? updatedKit : k)));
+    setCart((prev) =>
+      prev
+        .map((item) => (item.kit.id === updatedKit.id ? { ...item, kit: updatedKit } : item))
+        .filter((item) => item.kit.inStock)
+    );
+  };
+
+  const handleLocalKitAdd = (newKit: ReliefKit) => {
+    setKits((prev) => [...prev, newKit]);
   };
 
   const handleConfirmOrder = async (): Promise<boolean> => {
@@ -293,7 +371,7 @@ export default function App() {
   ) : null;
 
   const renderContent = () => {
-    if (!authReady || (currentUser && profileLoading)) {
+    if (!authReady || (currentUser && roleMode === 'student' && profileLoading)) {
       return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
           <div className="text-center space-y-2">
@@ -309,14 +387,78 @@ export default function App() {
     }
 
     if (!currentUser) {
-      return <LoginScreen />;
+      return (
+        <LoginScreen
+          onSelectRoleIntent={setRoleMode}
+          onPrefillVerifiedPhone={setPrefilledPhone}
+        />
+      );
     }
 
+    // ADMIN & RUNNER MODE: Direct route to Operations Control Center (hides customer storefront)
+    if (roleMode === 'admin') {
+      return (
+        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+          <header className="sticky top-0 z-30 h-14 bg-slate-900 text-white border-b border-slate-800">
+            <div className="max-w-5xl mx-auto h-full px-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 whitespace-nowrap">
+                <div className="w-8 h-8 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <span className="text-sm sm:text-base font-bold tracking-tight">
+                  Quick Care Ops
+                </span>
+                <span className="hidden sm:inline text-xs text-teal-300 font-medium">
+                  · Control Center
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoleMode('student');
+                    setActiveTab('order');
+                  }}
+                  className="min-h-[38px] px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-white flex items-center gap-1.5 whitespace-nowrap transition-colors"
+                >
+                  <Store className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Student Store</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void signOut(auth)}
+                  aria-label="Sign out"
+                  className="min-h-[38px] px-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-rose-900/60 text-slate-200 text-xs font-semibold flex items-center gap-1.5"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Logout</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-5">
+            <OperationsView
+              orders={orders}
+              kits={kits}
+              isCampusAdmin={isCampusAdmin}
+              onLocalKitUpdate={handleLocalKitUpdate}
+              onLocalKitAdd={handleLocalKitAdd}
+            />
+          </main>
+        </div>
+      );
+    }
+
+    // STUDENT MODE: Mandatory profile onboarding on first sign-in
     if (!profile || editingProfile) {
       return (
         <ProfileSetupModal
           user={currentUser}
           existingProfile={profile}
+          prefilledPhone={prefilledPhone}
           onClose={profile ? () => setEditingProfile(false) : undefined}
           onSaved={(saved) => {
             setProfile(saved);
@@ -332,7 +474,7 @@ export default function App() {
 
     return (
       <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-        {/* Top Header */}
+        {/* Top Student Header */}
         <header className="sticky top-0 z-30 h-14 bg-white/95 backdrop-blur-md border-b border-slate-200">
           <div className="max-w-5xl mx-auto h-full px-4 flex items-center justify-between gap-3">
             <button
@@ -358,19 +500,11 @@ export default function App() {
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                onClick={() => {
-                  const next = roleMode === 'student' ? 'runner' : 'student';
-                  setRoleMode(next);
-                  setActiveTab(next === 'runner' ? 'operations' : 'order');
-                }}
-                className={`min-h-[38px] px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 whitespace-nowrap transition-colors ${
-                  roleMode === 'runner'
-                    ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-teal-600'
-                }`}
+                onClick={() => setRoleMode('admin')}
+                className="min-h-[38px] px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-slate-900 text-xs font-semibold text-slate-700 flex items-center gap-1 whitespace-nowrap transition-colors"
               >
-                <Shield className="w-3.5 h-3.5" />
-                <span>{roleMode === 'runner' ? 'Runner Mode' : 'Student'}</span>
+                <Shield className="w-3.5 h-3.5 text-teal-700" />
+                <span>Admin Ops</span>
               </button>
 
               <button
@@ -394,7 +528,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Main Scrollable Workspace */}
+        {/* Main Student Workspace */}
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-4 pb-28 sm:pb-24 space-y-5">
           {/* Curfew Express Status Bar */}
           <div className="rounded-2xl bg-slate-900 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
@@ -414,6 +548,7 @@ export default function App() {
 
           {activeTab === 'order' && (
             <EmergencyOrderView
+              kits={kits}
               profile={profile}
               cart={cart}
               onAddKit={handleAddKit}
@@ -438,26 +573,14 @@ export default function App() {
               onGoToOrder={() => setActiveTab('order')}
             />
           )}
-
-          {activeTab === 'operations' && (
-            <OperationsView
-              orders={orders}
-              isCampusAdmin={isCampusAdmin}
-              onSelectOrderForTracker={(id) => {
-                setSelectedOrderId(id);
-                setActiveTab('tracker');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-            />
-          )}
         </main>
 
-        {/* Fixed 3-Tab Bottom Navigation Bar */}
+        {/* Fixed 2-Tab Student Bottom Navigation Bar */}
         <nav
-          aria-label="Primary app navigation"
+          aria-label="Customer storefront navigation"
           className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200"
         >
-          <div className="max-w-5xl mx-auto grid grid-cols-3 h-16">
+          <div className="max-w-5xl mx-auto grid grid-cols-2 h-16">
             <button
               type="button"
               onClick={() => setActiveTab('order')}
@@ -469,8 +592,8 @@ export default function App() {
               }`}
             >
               <PackagePlus className="w-5 h-5" />
-              <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
-                Emergency Order
+              <span className="text-xs font-semibold tracking-tight whitespace-nowrap">
+                Emergency Storefront
               </span>
             </button>
 
@@ -485,27 +608,8 @@ export default function App() {
               }`}
             >
               <MapPin className="w-5 h-5" />
-              <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
-                Live Map ({activeCount})
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setRoleMode('runner');
-                setActiveTab('operations');
-              }}
-              aria-current={activeTab === 'operations' ? 'page' : undefined}
-              className={`relative flex flex-col items-center justify-center gap-1 min-h-[56px] px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
-                activeTab === 'operations'
-                  ? 'text-teal-700 border-t-2 border-teal-600 -mt-[1px]'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <ClipboardList className="w-5 h-5" />
-              <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
-                Runner / Admin
+              <span className="text-xs font-semibold tracking-tight whitespace-nowrap">
+                Live Map Tracker ({activeCount})
               </span>
             </button>
           </div>

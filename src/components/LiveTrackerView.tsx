@@ -60,7 +60,7 @@ export function LiveTrackerView({ activeOrder, onGoToOrder }: LiveTrackerViewPro
   const [simulating, setSimulating] = useState(false);
   const [routePath, setRoutePath] = useState<LatLngLiteral[]>([]);
   const [totalDistMeters, setTotalDistMeters] = useState(1800);
-  const [secondsRemaining, setSecondsRemaining] = useState(1080); // 18:00 ETA countdown
+  const [secondsRemaining, setSecondsRemaining] = useState(1200); // 20:00 ETA countdown
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [quickMessage, setQuickMessage] = useState('');
   const [sentMessages, setSentMessages] = useState<string[]>([]);
@@ -74,12 +74,12 @@ export function LiveTrackerView({ activeOrder, onGoToOrder }: LiveTrackerViewPro
       setSecondsRemaining(0);
       setSimulating(false);
     } else if (activeOrder.trackerStep === 1) {
-      setSecondsRemaining(1080); // 18 mins
+      setSecondsRemaining(1200); // 20 mins
       simIndexRef.current = 0;
     } else if (activeOrder.trackerStep === 2) {
-      setSecondsRemaining(780);
+      setSecondsRemaining(840);
     } else if (activeOrder.trackerStep === 3) {
-      setSecondsRemaining(300);
+      setSecondsRemaining(320);
     }
 
     setQuickMessage(
@@ -122,7 +122,7 @@ export function LiveTrackerView({ activeOrder, onGoToOrder }: LiveTrackerViewPro
         nextStatus = 'gate_cleared';
       }
 
-      setSecondsRemaining(Math.max(0, Math.round(1080 * (1 - progress))));
+      setSecondsRemaining(Math.max(0, Math.round(1200 * (1 - progress))));
 
       const orderPath = `orders/${activeOrder.id}`;
       updateDoc(doc(db, 'orders', activeOrder.id), {

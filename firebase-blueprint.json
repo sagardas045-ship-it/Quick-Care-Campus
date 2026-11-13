@@ -7,7 +7,7 @@
       "properties": {
         "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
         "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
-        "email": { "type": "string", "minLength": 3, "maxLength": 150 },
+        "email": { "type": "string", "minLength": 0, "maxLength": 150 },
         "phone": { "type": "string", "pattern": "^\\+91[6-9][0-9]{9}$", "minLength": 13, "maxLength": 13 },
         "phoneVerified": { "type": "boolean" },
         "hostelName": { "type": "string", "minLength": 2, "maxLength": 120 },
@@ -92,6 +92,37 @@
         "updatedAt"
       ]
     },
+    "KitItem": {
+      "title": "KitItem",
+      "description": "OTC relief kit or emergency item managed by campus pharmacy operations.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 2, "maxLength": 64 },
+        "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "category": { "type": "string", "enum": ["Fever & Flu", "Headache & Acidity", "First-Aid", "Hydration & Cramps"] },
+        "price": { "type": "number" },
+        "contents": { "type": "array" },
+        "reliefFor": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "imagePath": { "type": "string", "minLength": 0, "maxLength": 300 },
+        "etaMinutes": { "type": "number" },
+        "sealedCode": { "type": "string", "minLength": 2, "maxLength": 32 },
+        "inStock": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "name",
+        "category",
+        "price",
+        "contents",
+        "reliefFor",
+        "imagePath",
+        "etaMinutes",
+        "sealedCode",
+        "inStock",
+        "updatedAt"
+      ]
+    },
     "RoleRecord": {
       "title": "RoleRecord",
       "description": "Authorized campus runner or operations admin membership marker.",
@@ -111,6 +142,10 @@
     "/orders/{orderId}": {
       "schema": { "$ref": "#/entities/CampusOrder" },
       "description": "Emergency late-night OTC orders tracked in real time."
+    },
+    "/kits/{kitId}": {
+      "schema": { "$ref": "#/entities/KitItem" },
+      "description": "OTC relief kits catalog and real-time stock status."
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/RoleRecord" },

@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import {
   DELIVERY_FEE,
-  RELIEF_KITS,
   SYMPTOM_FILTERS,
   WELLNESS_PASS_PRICE,
 } from '../data/campusData';
@@ -25,6 +24,7 @@ import { KitImage } from './KitImage';
 import { CheckoutForm } from './CheckoutForm';
 
 interface EmergencyOrderViewProps {
+  kits: ReliefKit[];
   profile: StudentProfile;
   cart: CartItem[];
   onAddKit: (kit: ReliefKit) => void;
@@ -43,6 +43,7 @@ interface EmergencyOrderViewProps {
 }
 
 export function EmergencyOrderView({
+  kits,
   profile,
   cart,
   onAddKit,
@@ -64,8 +65,8 @@ export function EmergencyOrderView({
 
   const filteredKits =
     selectedSymptom === 'All Kits'
-      ? RELIEF_KITS
-      : RELIEF_KITS.filter((kit) => kit.category === selectedSymptom);
+      ? kits
+      : kits.filter((kit) => kit.category === selectedSymptom);
 
   const getCartQty = (kitId: string) =>
     cart.find((item) => item.kit.id === kitId)?.quantity ?? 0;
@@ -86,14 +87,13 @@ export function EmergencyOrderView({
 
   return (
     <div className="space-y-5">
-      {/* Symptom Quick-Filter Controls */}
       <section aria-label="Symptom filters">
         <div className="flex items-center justify-between mb-2.5">
           <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
             Emergency OTC Relief Kits
           </h1>
           <span className="text-xs font-medium text-slate-500 tabular-nums whitespace-nowrap">
-            {filteredKits.length} of {RELIEF_KITS.length} kits
+            {filteredKits.length} of {kits.length} kits
           </span>
         </div>
 
@@ -118,7 +118,6 @@ export function EmergencyOrderView({
         </div>
       </section>
 
-      {/* Main Responsive Split: Catalog (Left) + Fast Checkout Panel (Desktop Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-7 space-y-4">
           {filteredKits.map((kit) => {
@@ -126,7 +125,11 @@ export function EmergencyOrderView({
             return (
               <article
                 key={kit.id}
-                className="rounded-2xl border border-slate-200 bg-white overflow-hidden transition-colors hover:border-slate-300"
+                className={`rounded-2xl border overflow-hidden transition-colors ${
+                  kit.inStock
+                    ? 'border-slate-200 bg-white hover:border-slate-300'
+                    : 'border-slate-200 bg-slate-50/70 opacity-80'
+                }`}
               >
                 <div className="grid grid-cols-1 sm:grid-cols-12">
                   <div className="sm:col-span-4 aspect-[4/3] sm:aspect-auto sm:h-full bg-slate-100">
@@ -140,7 +143,9 @@ export function EmergencyOrderView({
                         <span aria-hidden="true">·</span>
                         <span className="tabular-nums">{kit.etaMinutes} min gate ETA</span>
                         <span aria-hidden="true">·</span>
-                        <span className="font-mono">{kit.sealedCode}</span>
+                        <span className={kit.inStock ? 'text-teal-700 font-medium' : 'text-rose-700 font-semibold'}>
+                          {kit.inStock ? 'In Stock' : 'Out of Stock'}
+                        </span>
                       </div>
 
                       <div className="flex items-start justify-between gap-3">
@@ -170,11 +175,19 @@ export function EmergencyOrderView({
                     </div>
 
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
-                      <span className="text-xs text-slate-500">
-                        Tamper-proof pharmacy seal
+                      <span className="text-xs text-slate-500 font-mono">
+                        {kit.sealedCode}
                       </span>
 
-                      {qty === 0 ? (
+                      {!kit.inStock ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-200 text-slate-500 text-xs sm:text-sm font-semibold cursor-not-allowed whitespace-nowrap"
+                        >
+                          Out of Stock
+                        </button>
+                      ) : qty === 0 ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -194,7 +207,7 @@ export function EmergencyOrderView({
                             type="button"
                             onClick={() => onUpdateQuantity(kit.id, -1)}
                             aria-label={`Remove one ${kit.name}`}
-                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 active:scale-95 transition-transform focus-visible:outline-2 focus-visible:outline-teal-600"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 active:scale-95 transition-transform"
                           >
                             <Minus className="w-4 h-4" />
                           </button>
@@ -205,7 +218,7 @@ export function EmergencyOrderView({
                             type="button"
                             onClick={() => onUpdateQuantity(kit.id, 1)}
                             aria-label={`Add one more ${kit.name}`}
-                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-teal-600 text-white hover:bg-teal-700 active:scale-95 transition-transform focus-visible:outline-2 focus-visible:outline-teal-600"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-teal-600 text-white hover:bg-teal-700 active:scale-95 transition-transform"
                           >
                             <Plus className="w-4 h-4" />
                           </button>
@@ -226,11 +239,10 @@ export function EmergencyOrderView({
           </div>
         </div>
 
-        {/* Desktop Fast Checkout Panel */}
         <aside className="hidden lg:block lg:col-span-5 sticky top-20 rounded-2xl border border-slate-200 bg-white p-5">
           <div className="pb-3.5 mb-4 border-b border-slate-100 flex items-center justify-between">
             <div>
-              <h2 className="text-base font-bold text-slate-900">Fast Gate Checkout</h2>
+              <h2 className="text-base font-bold text-slate-900">60-Second Checkout</h2>
               <p className="text-xs text-slate-500">Auto-filled from your campus profile</p>
             </div>
             <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
@@ -257,7 +269,6 @@ export function EmergencyOrderView({
         </aside>
       </div>
 
-      {/* Mobile Floating Checkout Trigger Bar */}
       {totalItems > 0 && !mobileDrawerOpen && (
         <div className="lg:hidden fixed bottom-[72px] left-0 right-0 z-30 px-4">
           <button
@@ -284,7 +295,6 @@ export function EmergencyOrderView({
         </div>
       )}
 
-      {/* Mobile Fast Checkout Bottom Sheet Drawer */}
       {mobileDrawerOpen && (
         <div
           className="lg:hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 backdrop-blur-xs"
@@ -297,7 +307,7 @@ export function EmergencyOrderView({
               <div className="w-10 h-1.5 rounded-full bg-slate-300 mx-auto mb-3" />
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">Fast Gate Checkout</h2>
+                  <h2 className="text-base font-bold text-slate-900">60-Second Checkout</h2>
                   <p className="text-xs text-slate-500">Auto-filled from your campus profile</p>
                 </div>
                 <button
