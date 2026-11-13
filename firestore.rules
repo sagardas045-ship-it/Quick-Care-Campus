@@ -1,0 +1,194 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'sagardas045@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isRunnerOrAdmin() {
+      return isAdmin() || (
+        isSignedIn() && exists(/databases/$(database)/documents/runners/$(request.auth.uid))
+      );
+    }
+
+    function isValidPhone(phone) {
+      return phone is string && phone.size() == 13 && phone.matches('^\\+91[6-9][0-9]{9}$');
+    }
+
+    function isValidCoord(lat, lng) {
+      return lat is number && lng is number && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'email', 'phone', 'phoneVerified',
+          'hostelName', 'roomNumber', 'emergencyContactName',
+          'gateLat', 'gateLng', 'wellnessPassActive', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'phone', 'phoneVerified',
+          'hostelName', 'roomNumber', 'emergencyContactName',
+          'gateLat', 'gateLng', 'wellnessPassActive', 'createdAt', 'updatedAt'
+        ]) &&
+        data.uid is string && data.uid == userId && data.uid.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        isValidPhone(data.phone) &&
+        data.phoneVerified is bool &&
+        data.hostelName is string && data.hostelName.size() >= 2 && data.hostelName.size() <= 120 &&
+        data.roomNumber is string && data.roomNumber.size() >= 1 && data.roomNumber.size() <= 30 &&
+        data.emergencyContactName is string && data.emergencyContactName.size() >= 2 && data.emergencyContactName.size() <= 100 &&
+        isValidCoord(data.gateLat, data.gateLng) &&
+        data.wellnessPassActive is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+          'id', 'studentUid', 'studentName', 'studentPhone', 'hostelName', 'roomNumber',
+          'gateLat', 'gateLng', 'runnerName', 'runnerPhone', 'runnerLat', 'runnerLng',
+          'items', 'subtotal', 'deliveryFee', 'wellnessPassAdded', 'totalPayable',
+          'upiProvider', 'handoverPin', 'trackerStep', 'status', 'deliveryMinutes',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'studentUid', 'studentName', 'studentPhone', 'hostelName', 'roomNumber',
+          'gateLat', 'gateLng', 'runnerName', 'runnerPhone', 'runnerLat', 'runnerLng',
+          'items', 'subtotal', 'deliveryFee', 'wellnessPassAdded', 'totalPayable',
+          'upiProvider', 'handoverPin', 'trackerStep', 'status', 'deliveryMinutes',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 3 && data.id.size() <= 64 &&
+        data.studentUid is string && data.studentUid.size() >= 1 && data.studentUid.size() <= 128 &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 100 &&
+        isValidPhone(data.studentPhone) &&
+        data.hostelName is string && data.hostelName.size() >= 2 && data.hostelName.size() <= 120 &&
+        data.roomNumber is string && data.roomNumber.size() >= 1 && data.roomNumber.size() <= 30 &&
+        isValidCoord(data.gateLat, data.gateLng) &&
+        data.runnerName is string && data.runnerName.size() >= 2 && data.runnerName.size() <= 100 &&
+        isValidPhone(data.runnerPhone) &&
+        isValidCoord(data.runnerLat, data.runnerLng) &&
+        data.items is list && data.items.size() >= 1 && data.items.size() <= 10 && data.items[0] is map &&
+        data.subtotal is number && data.subtotal >= 1 && data.subtotal <= 50000 &&
+        data.deliveryFee is number && (data.deliveryFee == 0 || data.deliveryFee == 60) &&
+        data.wellnessPassAdded is bool &&
+        data.totalPayable is number && data.totalPayable >= 1 && data.totalPayable <= 60000 &&
+        data.upiProvider in ['GPay', 'PhonePe', 'Paytm'] &&
+        data.handoverPin is string && data.handoverPin.size() == 4 && data.handoverPin.matches('^[0-9]{4}$') &&
+        data.trackerStep is int && data.trackerStep >= 1 && data.trackerStep <= 4 &&
+        data.status in ['queued', 'picked_up', 'gate_cleared', 'arrived', 'delivered'] &&
+        data.deliveryMinutes is number && data.deliveryMinutes >= 0 && data.deliveryMinutes <= 180 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Student campus profiles (strictly owner or admin read/write to protect PII)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        (isOwner(userId) || isAdmin()) &&
+        isValidUserProfile(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'phone', 'phoneVerified', 'hostelName', 'roomNumber',
+          'emergencyContactName', 'gateLat', 'gateLng', 'wellnessPassActive', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Emergency OTC orders
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (
+        existing().studentUid == request.auth.uid || isRunnerOrAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.studentUid == request.auth.uid || isRunnerOrAdmin()
+      );
+      allow create: if isVerifiedUser() &&
+        isValidId(orderId) &&
+        isValidOrder(incoming()) &&
+        incoming().studentUid == request.auth.uid &&
+        incoming().status == 'queued' &&
+        incoming().trackerStep == 1 &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(orderId) &&
+        isValidOrder(incoming()) &&
+        existing().status != 'delivered' &&
+        incoming().studentUid == existing().studentUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isRunnerOrAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'trackerStep', 'runnerLat', 'runnerLng', 'deliveryMinutes', 'updatedAt'
+            ])
+          ) ||
+          (
+            existing().studentUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'trackerStep', 'runnerLat', 'runnerLng', 'deliveryMinutes', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // Role registries
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isOwner(adminId);
+      allow list, write: if false;
+    }
+
+    match /runners/{runnerId} {
+      allow get: if isValidId(runnerId) && (isOwner(runnerId) || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin() && isValidId(runnerId);
+    }
+  }
+}
