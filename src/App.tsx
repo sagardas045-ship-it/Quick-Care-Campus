@@ -33,6 +33,7 @@ import {
   CartItem,
   DemoSession,
   LatLngLiteral,
+  OrderFeedback,
   ReliefKit,
   StudentProfile,
   UpiProvider,
@@ -54,6 +55,7 @@ const CAMPUS_ADMIN_EMAIL = 'sagardas045@gmail.com';
 
 const DEMO_ORDERS_KEY = 'qcc_demo_orders_v1';
 const DEMO_KITS_KEY = 'qcc_demo_kits_v1';
+const DEMO_FEEDBACK_KEY = 'qcc_demo_feedback_v1';
 const DEMO_PROFILE_PREFIX = 'qcc_demo_profile_v1_';
 
 type CustomerTab = 'order' | 'tracker';
@@ -104,8 +106,9 @@ export default function App() {
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Orders state
+  // Orders & Post-delivery Feedback state
   const [orders, setOrders] = useState<CampusOrder[]>([]);
+  const [feedbackList, setFeedbackList] = useState<OrderFeedback[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const isDemoMode = Boolean(demoSession && !currentUser);
@@ -130,6 +133,7 @@ export default function App() {
       } else {
         setProfile(null);
         setOrders([]);
+        setFeedbackList([]);
         setSelectedOrderId(null);
         setRoleMode('student');
         setActiveTab('order');
@@ -250,6 +254,31 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser, profile, roleMode, isCampusAdmin]);
 
+  // Firestore Post-Delivery Feedback listener (feedback collection)
+  useEffect(() => {
+    if (!currentUser) return;
+    if (roleMode === 'student' && !profile) return;
+
+    const feedbackPath = 'feedback';
+    const feedbackQuery =
+      roleMode === 'admin' && isCampusAdmin
+        ? query(collection(db, 'feedback'))
+        : query(collection(db, 'feedback'), where('studentUid', '==', currentUser.uid));
+
+    const unsubscribe = onSnapshot(
+      feedbackQuery,
+      (snapshot) => {
+        const loaded: OrderFeedback[] = snapshot.docs.map((d) => d.data() as OrderFeedback);
+        setFeedbackList(loaded);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, feedbackPath);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser, profile, roleMode, isCampusAdmin]);
+
   // Demo Session Entry Handler (used when domain is unauthorized or +91 Demo OTP is verified)
   const handleEnterDemoSession = useCallback((session: DemoSession) => {
     setDemoSession(session);
@@ -261,6 +290,8 @@ export default function App() {
     setKits(savedKits);
     const savedOrders = readStorageJson<CampusOrder[]>(DEMO_ORDERS_KEY, []);
     setOrders(savedOrders);
+    const savedFeedback = readStorageJson<OrderFeedback[]>(DEMO_FEEDBACK_KEY, []);
+    setFeedbackList(savedFeedback);
 
     const savedProfile = readStorageJson<StudentProfile | null>(
       `${DEMO_PROFILE_PREFIX}${session.uid}`,
@@ -282,6 +313,7 @@ export default function App() {
     setDemoSession(null);
     setProfile(null);
     setOrders([]);
+    setFeedbackList([]);
     setSelectedOrderId(null);
     setRoleMode('student');
     setActiveTab('order');
@@ -461,6 +493,46 @@ export default function App() {
     }
   };
 
+  const handleSubmitFeedback = async (
+    order: CampusOrder,
+    rating: number,
+    comment: string
+  ): Promise<void> => {
+    const activeUid = currentUser?.uid ?? demoSession?.uid;
+    if (!activeUid) return;
+
+    const cleanComment = comment.trim().slice(0, 300);
+    const feedbackPayload: OrderFeedback = {
+      orderId: order.id,
+      studentUid: activeUid,
+      studentName: order.studentName.slice(0, 100),
+      runnerName: order.runnerName.slice(0, 100),
+      hostelName: order.hostelName.slice(0, 120),
+      rating: Math.max(1, Math.min(5, Math.round(rating))),
+      comment: cleanComment,
+    };
+
+    if (isDemoMode) {
+      setFeedbackList((prev) => {
+        const filtered = prev.filter((f) => f.orderId !== order.id);
+        const next = [feedbackPayload, ...filtered];
+        writeStorageJson(DEMO_FEEDBACK_KEY, next);
+        return next;
+      });
+      return;
+    }
+
+    const feedbackPath = `feedback/${order.id}`;
+    try {
+      await setDoc(doc(db, 'feedback', order.id), {
+        ...feedbackPayload,
+        createdAt: serverTimestamp(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, feedbackPath);
+    }
+  };
+
   const quotaBanner = quotaExceeded ? (
     <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
       <span>
@@ -568,6 +640,7 @@ export default function App() {
             <OperationsView
               orders={orders}
               kits={kits}
+              feedbackList={feedbackList}
               isCampusAdmin={isCampusAdmin}
               isDemoMode={isDemoMode}
               onDemoUpdateOrder={handleDemoUpdateOrder}
@@ -701,6 +774,12 @@ export default function App() {
           {activeTab === 'tracker' && (
             <LiveTrackerView
               activeOrder={activeOrder}
+              existingFeedback={
+                activeOrder
+                  ? feedbackList.find((f) => f.orderId === activeOrder.id) ?? null
+                  : null
+              }
+              onSubmitFeedback={handleSubmitFeedback}
               isDemoMode={isDemoMode}
               onDemoUpdateOrder={handleDemoUpdateOrder}
               onGoToOrder={() => setActiveTab('order')}

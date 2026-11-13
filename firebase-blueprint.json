@@ -132,6 +132,31 @@
         "assignedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "assignedAt"]
+    },
+    "OrderFeedback": {
+      "title": "OrderFeedback",
+      "description": "Post-delivery 1-to-5 star runner rating and optional short comment submitted by the student after delivery completion.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "minLength": 3, "maxLength": 64 },
+        "studentUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "studentName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "runnerName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "hostelName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "minLength": 0, "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "orderId",
+        "studentUid",
+        "studentName",
+        "runnerName",
+        "hostelName",
+        "rating",
+        "comment",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -146,6 +171,10 @@
     "/kits/{kitId}": {
       "schema": { "$ref": "#/entities/KitItem" },
       "description": "OTC relief kits catalog and real-time stock status."
+    },
+    "/feedback/{orderId}": {
+      "schema": { "$ref": "#/entities/OrderFeedback" },
+      "description": "Post-delivery student runner ratings (1-5 stars) and short comments keyed by orderId."
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/RoleRecord" },

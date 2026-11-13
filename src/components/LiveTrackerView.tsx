@@ -10,15 +10,18 @@ import {
   Play,
   Send,
   ShieldCheck,
+  Star,
   UserCheck,
   X,
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { CampusOrder, LatLngLiteral, OrderStatus } from '../types';
+import { CampusOrder, LatLngLiteral, OrderFeedback, OrderStatus } from '../types';
 import { LiveDeliveryMap } from './LiveDeliveryMap';
 
 interface LiveTrackerViewProps {
   activeOrder: CampusOrder | null;
+  existingFeedback: OrderFeedback | null;
+  onSubmitFeedback: (order: CampusOrder, rating: number, comment: string) => Promise<void>;
   isDemoMode?: boolean;
   onDemoUpdateOrder?: (orderId: string, patch: Partial<CampusOrder>) => void;
   onGoToOrder: () => void;
@@ -58,8 +61,25 @@ function formatCountdown(totalSeconds: number): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
+const RATING_LABELS: Record<number, string> = {
+  1: 'Needs Improvement',
+  2: 'Below Expectations',
+  3: 'Good Delivery',
+  4: 'Fast & Helpful',
+  5: 'Exceptional Night Rescue',
+};
+
+const QUICK_PRAISE_TAGS = [
+  'Super fast',
+  'Polite at hostel gate',
+  'Tamper-proof seal intact',
+  'Smooth PIN handover',
+];
+
 export function LiveTrackerView({
   activeOrder,
+  existingFeedback,
+  onSubmitFeedback,
   isDemoMode = false,
   onDemoUpdateOrder,
   onGoToOrder,
@@ -71,6 +91,13 @@ export function LiveTrackerView({
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [quickMessage, setQuickMessage] = useState('');
   const [sentMessages, setSentMessages] = useState<string[]>([]);
+
+  // Post-delivery feedback states
+  const [selectedRating, setSelectedRating] = useState<number>(0);
+  const [hoverRating, setHoverRating] = useState<number>(0);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   const simIndexRef = useRef(0);
 
@@ -92,6 +119,10 @@ export function LiveTrackerView({
     setQuickMessage(
       `Hi ${activeOrder.runnerName}, I am at ${activeOrder.hostelName} (Room ${activeOrder.roomNumber}) for Order #${activeOrder.id}. Let me know once you reach the gate desk!`
     );
+    setSelectedRating(0);
+    setHoverRating(0);
+    setFeedbackComment('');
+    setFeedbackError(null);
   }, [activeOrder?.id]);
 
   // 1-second ETA countdown
@@ -248,6 +279,180 @@ export function LiveTrackerView({
           </span>
         </button>
       </div>
+
+      {/* Post-Delivery Runner Feedback System (Shown once marked delivered) */}
+      {activeOrder.status === 'delivered' && (
+        <section
+          aria-label="Post-delivery runner feedback"
+          className="rounded-2xl border border-teal-200 bg-white p-5 space-y-4 shadow-xs"
+        >
+          {existingFeedback ? (
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-teal-600 shrink-0" />
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                    Thank you for rating {existingFeedback.runnerName}!
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1" aria-label={`Rated ${existingFeedback.rating} out of 5 stars`}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`w-4 h-4 ${
+                        star <= existingFeedback.rating
+                          ? 'text-amber-500 fill-amber-400'
+                          : 'text-slate-200'
+                      }`}
+                    />
+                  ))}
+                  <span className="ml-1.5 text-xs font-mono font-bold text-slate-700 tabular-nums">
+                    {existingFeedback.rating}/5
+                  </span>
+                </div>
+              </div>
+              {existingFeedback.comment ? (
+                <p className="rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs text-slate-700 italic">
+                  &ldquo;{existingFeedback.comment}&rdquo;
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Your rating has been logged with Campus Operations.
+                </p>
+              )}
+            </div>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (selectedRating < 1 || selectedRating > 5) {
+                  setFeedbackError('Please select a 1 to 5 star rating for your runner.');
+                  return;
+                }
+                setFeedbackError(null);
+                setSubmittingFeedback(true);
+                try {
+                  await onSubmitFeedback(
+                    activeOrder,
+                    selectedRating,
+                    feedbackComment.trim().slice(0, 300)
+                  );
+                } finally {
+                  setSubmittingFeedback(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <span className="text-xs font-semibold text-teal-700">
+                    Delivery Completed · Order #{activeOrder.id}
+                  </span>
+                  <h2 className="text-base font-bold text-slate-900 mt-0.5">
+                    Rate Your Runner Experience ({activeOrder.runnerName})
+                  </h2>
+                </div>
+                {(hoverRating || selectedRating) > 0 && (
+                  <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                    {RATING_LABELS[hoverRating || selectedRating]}
+                  </span>
+                )}
+              </div>
+
+              {/* 1-5 Star Selector */}
+              <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Runner star rating">
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const active = star <= (hoverRating || selectedRating);
+                  return (
+                    <button
+                      key={star}
+                      type="button"
+                      role="radio"
+                      aria-checked={selectedRating === star}
+                      aria-label={`${star} ${star === 1 ? 'star' : 'stars'}`}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      onClick={() => {
+                        setSelectedRating(star);
+                        setFeedbackError(null);
+                      }}
+                      className={`min-h-[44px] min-w-[44px] rounded-xl border flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                        active
+                          ? 'border-amber-300 bg-amber-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <Star
+                        className={`w-6 h-6 transition-colors ${
+                          active
+                            ? 'text-amber-500 fill-amber-400'
+                            : 'text-slate-300'
+                        }`}
+                      />
+                    </button>
+                  );
+                })}
+                <span className="ml-2 text-xs font-mono font-semibold text-slate-600 tabular-nums">
+                  {selectedRating > 0 ? `${selectedRating} / 5` : 'Tap a star'}
+                </span>
+              </div>
+
+              {/* Quick Tags */}
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_PRAISE_TAGS.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() =>
+                      setFeedbackComment((prev) => {
+                        if (prev.includes(tag)) return prev;
+                        const next = prev.trim() ? `${prev.trim()}, ${tag}` : tag;
+                        return next.slice(0, 300);
+                      })
+                    }
+                    className="min-h-[34px] px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:border-teal-600 text-[11px] font-medium text-slate-700 transition-colors"
+                  >
+                    + {tag}
+                  </button>
+                ))}
+              </div>
+
+              {/* Short Comment */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <label htmlFor="runner-feedback-comment" className="font-semibold text-slate-700">
+                    Short Comment (Optional)
+                  </label>
+                  <span className="font-mono text-[11px] text-slate-400 tabular-nums">
+                    {feedbackComment.length}/300
+                  </span>
+                </div>
+                <textarea
+                  id="runner-feedback-comment"
+                  rows={2}
+                  maxLength={300}
+                  value={feedbackComment}
+                  onChange={(e) => setFeedbackComment(e.target.value.slice(0, 300))}
+                  placeholder="Share how quickly your runner reached the hostel gate or any helpful note..."
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20 resize-none"
+                />
+              </div>
+
+              {feedbackError && (
+                <p className="text-xs font-medium text-rose-700">{feedbackError}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={submittingFeedback}
+                className="w-full sm:w-auto min-h-[48px] px-6 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-slate-400 text-white text-sm font-semibold transition-colors"
+              >
+                {submittingFeedback ? 'Submitting Feedback...' : 'Submit Runner Rating'}
+              </button>
+            </form>
+          )}
+        </section>
+      )}
 
       {/* Interactive Google Map View */}
       <LiveDeliveryMap

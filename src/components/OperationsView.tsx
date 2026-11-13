@@ -17,6 +17,7 @@ import {
   PackageCheck,
   Plus,
   ShieldAlert,
+  Star,
   TrendingUp,
   Truck,
   X,
@@ -31,12 +32,13 @@ import {
   RUNNER_PAYOUT,
 } from '../data/campusData';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { CampusOrder, ReliefKit, SymptomCategory } from '../types';
+import { CampusOrder, OrderFeedback, ReliefKit, SymptomCategory } from '../types';
 import { KitImage } from './KitImage';
 
 interface OperationsViewProps {
   orders: CampusOrder[];
   kits: ReliefKit[];
+  feedbackList: OrderFeedback[];
   isCampusAdmin: boolean;
   isDemoMode?: boolean;
   onDemoUpdateOrder?: (orderId: string, patch: Partial<CampusOrder>) => void;
@@ -65,6 +67,7 @@ const STATUS_LABELS: Record<CampusOrder['status'], { text: string; tone: string 
 export function OperationsView({
   orders,
   kits,
+  feedbackList,
   isCampusAdmin,
   isDemoMode = false,
   onDemoUpdateOrder,
@@ -113,6 +116,12 @@ export function OperationsView({
             deliveredCount
         )
       : 16;
+  const avgRunnerRating =
+    feedbackList.length > 0
+      ? (
+          feedbackList.reduce((sum, f) => sum + f.rating, 0) / feedbackList.length
+        ).toFixed(1)
+      : null;
 
   const updateOrderStatus = async (
     order: CampusOrder,
@@ -453,6 +462,41 @@ export function OperationsView({
                           <span aria-hidden="true">·</span>
                           <span>Runner: {order.runnerName}</span>
                         </div>
+
+                        {order.status === 'delivered' && (() => {
+                          const orderFeedback = feedbackList.find((f) => f.orderId === order.id);
+                          if (!orderFeedback) {
+                            return (
+                              <div className="pt-1 text-[11px] text-slate-400">
+                                Awaiting post-delivery student rating
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="mt-1.5 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 space-y-1">
+                              <div className="flex items-center gap-1.5">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star
+                                    key={star}
+                                    className={`w-3.5 h-3.5 ${
+                                      star <= orderFeedback.rating
+                                        ? 'text-amber-500 fill-amber-400'
+                                        : 'text-slate-300'
+                                    }`}
+                                  />
+                                ))}
+                                <span className="text-[11px] font-mono font-bold text-amber-900 tabular-nums">
+                                  {orderFeedback.rating}/5
+                                </span>
+                              </div>
+                              {orderFeedback.comment && (
+                                <p className="text-xs text-slate-700 italic">
+                                  &ldquo;{orderFeedback.comment}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -852,12 +896,16 @@ export function OperationsView({
               <div>
                 <div className="text-[11px] text-slate-400 flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5 text-teal-400" />
-                  Avg. Delivery Time
+                  Avg. Delivery / Rating
                 </div>
                 <div className="text-xl font-mono font-bold tabular-nums mt-1">
                   {avgDeliveryMins} mins
                 </div>
-                <div className="text-[11px] text-teal-300">Target &lt; 20 mins</div>
+                <div className="text-[11px] text-teal-300 tabular-nums">
+                  {avgRunnerRating
+                    ? `${avgRunnerRating} ★ (${feedbackList.length} rated)`
+                    : 'Target < 20 mins'}
+                </div>
               </div>
             </div>
           </div>

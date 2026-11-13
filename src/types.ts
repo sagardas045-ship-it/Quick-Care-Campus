@@ -100,3 +100,14 @@ export interface CampusOrder {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
+
+export interface OrderFeedback {
+  orderId: string;
+  studentUid: string;
+  studentName: string;
+  runnerName: string;
+  hostelName: string;
+  rating: number;
+  comment: string;
+  createdAt?: Timestamp;
+}

@@ -140,6 +140,25 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidFeedback(data, orderId) {
+      return data.keys().hasAll([
+          'orderId', 'studentUid', 'studentName', 'runnerName',
+          'hostelName', 'rating', 'comment', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'orderId', 'studentUid', 'studentName', 'runnerName',
+          'hostelName', 'rating', 'comment', 'createdAt'
+        ]) &&
+        data.orderId is string && data.orderId == orderId && data.orderId.size() >= 3 && data.orderId.size() <= 64 &&
+        data.studentUid is string && data.studentUid == request.auth.uid && data.studentUid.size() <= 128 &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 100 &&
+        data.runnerName is string && data.runnerName.size() >= 2 && data.runnerName.size() <= 100 &&
+        data.hostelName is string && data.hostelName.size() >= 2 && data.hostelName.size() <= 120 &&
+        data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+        data.comment is string && data.comment.size() <= 300 &&
+        data.createdAt is timestamp;
+    }
+
     // Student campus profiles (strictly owner or admin read/write to protect PII)
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
@@ -212,6 +231,25 @@ service cloud.firestore {
         isValidKit(incoming(), kitId) &&
         incoming().updatedAt == request.time;
       allow delete: if isAdmin() && isValidId(kitId);
+    }
+
+    // Post-delivery runner feedback (student owner can rate once after order is delivered; admins/runners can view)
+    match /feedback/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (
+        existing().studentUid == request.auth.uid || isRunnerOrAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.studentUid == request.auth.uid || isRunnerOrAdmin()
+      );
+      allow create: if isVerifiedUser() &&
+        isValidId(orderId) &&
+        isValidFeedback(incoming(), orderId) &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/orders/$(orderId)) &&
+        get(/databases/$(database)/documents/orders/$(orderId)).data.studentUid == request.auth.uid &&
+        get(/databases/$(database)/documents/orders/$(orderId)).data.status == 'delivered';
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(orderId);
     }
 
     // Role registries
