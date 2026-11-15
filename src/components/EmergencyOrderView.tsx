@@ -8,7 +8,6 @@ import {
   Minus,
   Plus,
   RotateCcw,
-  Search,
   ShieldAlert,
   ShieldCheck,
   ShoppingBag,
@@ -28,7 +27,9 @@ import {
   SymptomCategory,
   UpiProvider,
 } from '../types';
+import { filterKitsBySearch } from '../utils/symptomSearch';
 import { ProductPhoto } from './ProductPhoto';
+import { SymptomSearchBar } from './SymptomSearchBar';
 import { CheckoutForm } from './CheckoutForm';
 
 interface EmergencyOrderViewProps {
@@ -37,6 +38,7 @@ interface EmergencyOrderViewProps {
   cart: CartItem[];
   onAddKit: (kit: ReliefKit) => void;
   onUpdateQuantity: (kitId: string, delta: number) => void;
+  onClearCart?: () => void;
   orderPin: LatLngLiteral;
   onChangeOrderPin: (coords: LatLngLiteral) => void;
   roomNumber: string;
@@ -99,6 +101,7 @@ export function EmergencyOrderView({
   cart,
   onAddKit,
   onUpdateQuantity,
+  onClearCart,
   orderPin,
   onChangeOrderPin,
   roomNumber,
@@ -187,24 +190,47 @@ export function EmergencyOrderView({
   }, [kits, lastCompletedOrder]);
 
   const filteredKits = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return kits.filter((kit) => {
-      const matchesCat =
-        selectedSymptom === 'All Kits' || kit.category === selectedSymptom;
-      if (!matchesCat) return false;
-      if (!q) return true;
-      return (
-        kit.name.toLowerCase().includes(q) ||
-        kit.category.toLowerCase().includes(q) ||
-        kit.reliefFor.toLowerCase().includes(q) ||
-        kit.sealedCode.toLowerCase().includes(q) ||
-        kit.contents.some((item) => item.toLowerCase().includes(q))
-      );
-    });
+    const categoryScoped =
+      selectedSymptom === 'All Kits'
+        ? kits
+        : kits.filter((kit) => kit.category === selectedSymptom);
+    return filterKitsBySearch(categoryScoped, searchQuery);
   }, [kits, selectedSymptom, searchQuery]);
 
-  const getCartQty = (kitId: string) =>
-    cart.find((item) => item.kit.id === kitId)?.quantity ?? 0;
+  const handleSearchQueryChange = (nextValue: string) => {
+    if (nextValue.trim().length > 0 && searchQuery.trim().length === 0) {
+      setSelectedSymptom('All Kits');
+    }
+    setSearchQuery(nextValue);
+  };
+
+  const handleVoiceOrChipFilter = (nextQuery?: string) => {
+    setSelectedSymptom('All Kits');
+    if (typeof nextQuery === 'string') {
+      setSearchQuery(nextQuery);
+    }
+  };
+
+  const isKitInCart = (kitId?: string): boolean => {
+    if (typeof kitId !== 'string' || kitId.trim().length === 0) return false;
+    return cart.some(
+      (item) =>
+        typeof item.id === 'string' &&
+        item.id.length > 0 &&
+        item.id === kitId &&
+        item.quantity > 0
+    );
+  };
+
+  const getCartQty = (kitId?: string): number => {
+    if (!isKitInCart(kitId)) return 0;
+    const match = cart.find(
+      (item) => typeof item.id === 'string' && item.id.length > 0 && item.id === kitId
+    );
+    return match && Number.isFinite(match.quantity) && match.quantity > 0
+      ? match.quantity
+      : 0;
+  };
 
   const subtotal = cart.reduce(
     (sum, item) => sum + item.kit.price * item.quantity,
@@ -221,12 +247,10 @@ export function EmergencyOrderView({
     !profile.wellnessPassActive && wellnessPassAdded ? WELLNESS_PASS_PRICE : 0;
   const totalPayable = subtotal + deliveryFee + passCost;
 
-  const triggerAddFeedback = (kit: ReliefKit, isFirstAdd: boolean) => {
+  const triggerAddFeedback = (kit: ReliefKit) => {
+    if (!kit || typeof kit.id !== 'string' || kit.id.trim().length === 0) return;
     setFlyingBadge({ key: Date.now(), label: kit.name });
     onAddKit(kit);
-    if (isFirstAdd && window.innerWidth < 1024) {
-      setMobileDrawerOpen(true);
-    }
   };
 
   const handleMobileConfirm = async () => {
@@ -238,6 +262,19 @@ export function EmergencyOrderView({
 
   return (
     <div className="space-y-6">
+      {/* Smart Symptom Search Bar & Hands-Free Voice Search directly below Header */}
+      <section aria-label="Smart symptom and voice search">
+        <SymptomSearchBar
+          value={searchQuery}
+          onChange={handleSearchQueryChange}
+          onVoiceActivate={() => setSelectedSymptom('All Kits')}
+          onQuickChipSelect={(chipQuery) => handleVoiceOrChipFilter(chipQuery)}
+          showQuickChips={true}
+          resultCount={filteredKits.length}
+          totalCount={kits.length}
+        />
+      </section>
+
       {/* Interactive Clean Clinical Hero Banner */}
       <motion.section
         initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
@@ -296,93 +333,70 @@ export function EmergencyOrderView({
         </div>
       </motion.section>
 
-      {/* Instant Live Search Bar & 8-Category Tactile Selector */}
-      <section aria-label="Search and OTC categories" className="space-y-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* 10-Category Tactile Selector & One-Click Reorder */}
+      <section aria-label="OTC categories and recent reorder" className="space-y-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
               Emergency OTC Storefront
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {kits.length} sealed hostel kits across 8 categories
+              {searchQuery.trim()
+                ? `Showing ${filteredKits.length} of ${kits.length} kits for "${searchQuery.trim()}"`
+                : `${kits.length} sealed hostel kits & essentials across ${Math.max(1, SYMPTOM_FILTERS.length - 1)} categories`}
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
-            {/* One-Click Reorder Recent Button */}
-            <motion.button
-              type="button"
-              whileTap={
-                shouldReduceMotion ||
-                !recentOrderMeta ||
-                recentOrderMeta.availableUnits === 0
-                  ? undefined
-                  : { scale: 0.96, y: 1 }
-              }
-              disabled={
-                !recentOrderMeta ||
-                recentOrderMeta.availableUnits === 0 ||
-                !onReorderRecent
-              }
-              onClick={() => {
-                if (!recentOrderMeta || !onReorderRecent) return;
-                onReorderRecent(recentOrderMeta.order);
-                setReorderedFeedback(true);
-              }}
-              title={
-                recentOrderMeta
-                  ? recentOrderMeta.summaryTitle
-                  : 'Available after your first delivered order'
-              }
-              className={`min-h-[44px] px-3.5 py-2 rounded-2xl border text-xs sm:text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
-                reorderedFeedback
-                  ? 'bg-emerald-600 text-white border-emerald-700 border-b-[3px] border-b-emerald-800 shadow-sm'
-                  : recentOrderMeta && recentOrderMeta.availableUnits > 0
-                  ? 'bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100/80 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 border-teal-300 dark:border-teal-700 border-b-[3px] border-b-teal-500 active:border-b active:translate-y-[1px] shadow-xs'
-                  : 'bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
-              }`}
-            >
-              {reorderedFeedback ? (
-                <>
-                  <Check className="w-4 h-4 shrink-0" />
-                  <span>Added to Cart</span>
-                </>
-              ) : (
-                <>
-                  <RotateCcw className="w-4 h-4 shrink-0" />
-                  <span>Reorder Recent</span>
-                  {recentOrderMeta && recentOrderMeta.availableUnits > 0 && (
-                    <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-lg bg-teal-600/12 dark:bg-teal-400/15 text-teal-800 dark:text-teal-200 tabular-nums">
-                      {recentOrderMeta.availableUnits} · ₹{recentOrderMeta.availablePrice}
-                    </span>
-                  )}
-                </>
-              )}
-            </motion.button>
-
-            {/* Instant Live Symptom & Product Search Bar */}
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search symptoms (fever, acidity, pads)..."
-                aria-label="Search OTC kits and symptoms"
-                className="w-full min-h-[44px] rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md pl-10 pr-9 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-xs focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  aria-label="Clear search query"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[32px] min-w-[32px] rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
+          {/* One-Click Reorder Recent Button */}
+          <motion.button
+            type="button"
+            whileTap={
+              shouldReduceMotion ||
+              !recentOrderMeta ||
+              recentOrderMeta.availableUnits === 0
+                ? undefined
+                : { scale: 0.96, y: 1 }
+            }
+            disabled={
+              !recentOrderMeta ||
+              recentOrderMeta.availableUnits === 0 ||
+              !onReorderRecent
+            }
+            onClick={() => {
+              if (!recentOrderMeta || !onReorderRecent) return;
+              onReorderRecent(recentOrderMeta.order);
+              setReorderedFeedback(true);
+            }}
+            title={
+              recentOrderMeta
+                ? recentOrderMeta.summaryTitle
+                : 'Available after your first delivered order'
+            }
+            className={`min-h-[44px] px-3.5 py-2 rounded-2xl border text-xs sm:text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
+              reorderedFeedback
+                ? 'bg-emerald-600 text-white border-emerald-700 border-b-[3px] border-b-emerald-800 shadow-sm'
+                : recentOrderMeta && recentOrderMeta.availableUnits > 0
+                ? 'bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100/80 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 border-teal-300 dark:border-teal-700 border-b-[3px] border-b-teal-500 active:border-b active:translate-y-[1px] shadow-xs'
+                : 'bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
+            }`}
+          >
+            {reorderedFeedback ? (
+              <>
+                <Check className="w-4 h-4 shrink-0" />
+                <span>Added to Cart</span>
+              </>
+            ) : (
+              <>
+                <RotateCcw className="w-4 h-4 shrink-0" />
+                <span>Reorder Recent</span>
+                {recentOrderMeta && recentOrderMeta.availableUnits > 0 && (
+                  <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-lg bg-teal-600/12 dark:bg-teal-400/15 text-teal-800 dark:text-teal-200 tabular-nums">
+                    {recentOrderMeta.availableUnits} · ₹{recentOrderMeta.availablePrice}
+                  </span>
+                )}
+              </>
+            )}
+          </motion.button>
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
@@ -429,7 +443,7 @@ export function EmergencyOrderView({
                 No OTC kits matched &ldquo;{searchQuery}&rdquo;
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Try searching symptoms like fever, acidity, migraine, sprain, pads, or sleep.
+                Try searching symptoms or brands like fever, ENO, Volini, eye drops, sprain, pads, or sleep.
               </p>
               <button
                 type="button"
@@ -478,6 +492,14 @@ export function EmergencyOrderView({
 
                     <div className="p-4 space-y-2">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        {kit.skuCode && (
+                          <>
+                            <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                              {kit.skuCode}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                          </>
+                        )}
                         <span className="font-semibold text-teal-700 dark:text-teal-400">
                           {kit.category}
                         </span>
@@ -507,6 +529,12 @@ export function EmergencyOrderView({
                           ₹{kit.price}
                         </span>
                       </div>
+
+                      {kit.subtitle && (
+                        <p className="text-[11px] font-medium text-teal-800 dark:text-teal-300 leading-snug">
+                          {kit.subtitle}
+                        </p>
+                      )}
 
                       <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                         {kit.reliefFor}
@@ -545,19 +573,18 @@ export function EmergencyOrderView({
                       >
                         Out of Stock
                       </button>
-                    ) : qty === 0 ? (
+                    ) : !isKitInCart(kit.id) || qty === 0 ? (
                       <motion.button
                         type="button"
                         whileTap={
                           shouldReduceMotion ? undefined : { scale: 0.95, y: 2 }
                         }
-                        onClick={() =>
-                          triggerAddFeedback(kit, cart.length === 0)
-                        }
+                        onClick={() => triggerAddFeedback(kit)}
+                        aria-label={`Add ${kit.name} to cart`}
                         className="min-h-[44px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-semibold border-b-[4px] border-teal-800 active:border-b-0 active:translate-y-[3px] whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-all focus-visible:outline-2 focus-visible:outline-teal-600"
                       >
                         <Plus className="w-4 h-4" />
-                        <span>Add Kit</span>
+                        <span>Add</span>
                       </motion.button>
                     ) : (
                       <div className="flex items-center gap-1.5">
@@ -582,7 +609,7 @@ export function EmergencyOrderView({
                         <motion.button
                           type="button"
                           whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
-                          onClick={() => triggerAddFeedback(kit, false)}
+                          onClick={() => triggerAddFeedback(kit)}
                           aria-label={`Add one more ${kit.name}`}
                           className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-teal-600 text-white border-b-[3px] border-teal-800 hover:bg-teal-500 active:border-b-0 active:translate-y-[2px] transition-all"
                         >
@@ -626,6 +653,7 @@ export function EmergencyOrderView({
             profile={profile}
             cart={cart}
             onUpdateQuantity={onUpdateQuantity}
+            onClearCart={onClearCart}
             orderPin={orderPin}
             onChangeOrderPin={onChangeOrderPin}
             roomNumber={roomNumber}
@@ -759,6 +787,7 @@ export function EmergencyOrderView({
                   profile={profile}
                   cart={cart}
                   onUpdateQuantity={onUpdateQuantity}
+                  onClearCart={onClearCart}
                   orderPin={orderPin}
                   onChangeOrderPin={onChangeOrderPin}
                   roomNumber={roomNumber}
@@ -817,6 +846,14 @@ export function EmergencyOrderView({
                 <div className="overflow-y-auto p-5 space-y-4">
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      {selectedDetailKit.skuCode && (
+                        <>
+                          <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                            {selectedDetailKit.skuCode}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                        </>
+                      )}
                       <span className="font-semibold text-teal-700 dark:text-teal-400">
                         {selectedDetailKit.category}
                       </span>
@@ -834,6 +871,12 @@ export function EmergencyOrderView({
                         ₹{selectedDetailKit.price}
                       </span>
                     </div>
+
+                    {selectedDetailKit.subtitle && (
+                      <p className="text-xs font-medium text-teal-800 dark:text-teal-300 leading-snug">
+                        {selectedDetailKit.subtitle}
+                      </p>
+                    )}
 
                     <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                       {selectedDetailKit.reliefFor}
@@ -876,15 +919,16 @@ export function EmergencyOrderView({
                       >
                         Out of Stock
                       </button>
-                    ) : modalQty === 0 ? (
+                    ) : !isKitInCart(selectedDetailKit.id) || modalQty === 0 ? (
                       <motion.button
                         type="button"
                         whileTap={shouldReduceMotion ? undefined : { scale: 0.95 }}
-                        onClick={() => triggerAddFeedback(selectedDetailKit, cart.length === 0)}
+                        onClick={() => triggerAddFeedback(selectedDetailKit)}
+                        aria-label={`Add ${selectedDetailKit.name} to cart`}
                         className="min-h-[44px] px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-semibold border-b-[3px] border-teal-800 flex items-center gap-1.5 shrink-0"
                       >
                         <Plus className="w-4 h-4" />
-                        <span>Add Kit · ₹{selectedDetailKit.price}</span>
+                        <span>Add · ₹{selectedDetailKit.price}</span>
                       </motion.button>
                     ) : (
                       <div className="flex items-center gap-2">
@@ -901,7 +945,7 @@ export function EmergencyOrderView({
                         </span>
                         <button
                           type="button"
-                          onClick={() => triggerAddFeedback(selectedDetailKit, false)}
+                          onClick={() => triggerAddFeedback(selectedDetailKit)}
                           aria-label={`Add one more ${selectedDetailKit.name}`}
                           className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-teal-600 text-white border-b-[3px] border-teal-800"
                         >

@@ -9,7 +9,9 @@ export type SymptomCategory =
   | 'Hydration & Energy'
   | 'Period & Cramp Care'
   | 'Personal Hygiene & Masks'
-  | 'Sleep & Wellness';
+  | 'Sleep & Wellness'
+  | 'Eye, Ear & Skin Care'
+  | 'Single Strip & Quick-Grab Essentials';
 
 export type AppTab = 'order' | 'tracker' | 'operations';
 
@@ -32,10 +34,13 @@ export interface LatLngLiteral {
 
 export interface ReliefKit {
   id: string;
+  skuCode?: string;
   name: string;
+  subtitle?: string;
   category: Exclude<SymptomCategory, 'All Kits'>;
   price: number;
   contents: string[];
+  symptomTags?: string[];
   reliefFor: string;
   imagePath: string;
   photoDataUrl?: string;
@@ -45,6 +50,7 @@ export interface ReliefKit {
 }
 
 export interface CartItem {
+  id: string;
   kit: ReliefKit;
   quantity: number;
 }

@@ -76,6 +76,8 @@ const DEMO_KITS_KEY = 'qcc_demo_kits_v1';
 const DEMO_FEEDBACK_KEY = 'qcc_demo_feedback_v1';
 const DEMO_PROFILE_PREFIX = 'qcc_demo_profile_v1_';
 const THEME_STORAGE_KEY = 'qcc_theme_pref_v2';
+const CART_STORAGE_KEY = 'qcc_cart_v1';
+const LEGACY_CART_KEYS = ['cart', 'qcc_cart', 'quickcare_cart', 'qcc_demo_cart_v1'];
 
 type CustomerTab = 'order' | 'tracker' | 'history';
 
@@ -95,6 +97,128 @@ function writeStorageJson(key: string, value: unknown): void {
   } catch {
     // ignore storage quota errors
   }
+}
+
+function clearCartStorage(): void {
+  try {
+    window.localStorage.removeItem(CART_STORAGE_KEY);
+    for (const legacyKey of LEGACY_CART_KEYS) {
+      window.localStorage.removeItem(legacyKey);
+    }
+  } catch {
+    // ignore storage access issues
+  }
+}
+
+function loadSanitizedCart(catalog: ReliefKit[]): CartItem[] {
+  if (typeof window === 'undefined') return [];
+
+  for (const legacyKey of LEGACY_CART_KEYS) {
+    try {
+      window.localStorage.removeItem(legacyKey);
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(CART_STORAGE_KEY);
+  } catch {
+    return [];
+  }
+
+  if (!raw) return [];
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      clearCartStorage();
+      return [];
+    }
+
+    const catalogById = new globalThis.Map<string, ReliefKit>();
+    catalog.forEach((k) => {
+      if (typeof k.id === 'string' && k.id.trim().length > 0) {
+        catalogById.set(k.id.trim(), k);
+      }
+    });
+
+    const sanitized: CartItem[] = [];
+    const seenIds = new Set<string>();
+
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== 'object') {
+        clearCartStorage();
+        return [];
+      }
+      const record = entry as { id?: unknown; kit?: { id?: unknown }; quantity?: unknown };
+      const rawId =
+        typeof record.id === 'string' && record.id.trim().length > 0
+          ? record.id.trim()
+          : typeof record.kit?.id === 'string' && record.kit.id.trim().length > 0
+          ? record.kit.id.trim()
+          : null;
+
+      const qty =
+        typeof record.quantity === 'number' &&
+        Number.isInteger(record.quantity) &&
+        record.quantity >= 1 &&
+        record.quantity <= 99
+          ? record.quantity
+          : null;
+
+      if (!rawId || qty === null) {
+        clearCartStorage();
+        return [];
+      }
+
+      if (seenIds.has(rawId)) continue;
+      const matchedKit = catalogById.get(rawId);
+      if (!matchedKit || !matchedKit.inStock) continue;
+
+      seenIds.add(rawId);
+      sanitized.push({ id: matchedKit.id, kit: matchedKit, quantity: qty });
+    }
+
+    return sanitized;
+  } catch {
+    clearCartStorage();
+    return [];
+  }
+}
+
+function sanitizeCartAgainstCatalog(items: CartItem[], catalog: ReliefKit[]): CartItem[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const catalogById = new globalThis.Map<string, ReliefKit>();
+  catalog.forEach((k) => {
+    if (typeof k.id === 'string' && k.id.trim().length > 0) {
+      catalogById.set(k.id.trim(), k);
+    }
+  });
+
+  const next: CartItem[] = [];
+  const seenIds = new Set<string>();
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const itemId =
+      typeof item.id === 'string' && item.id.trim().length > 0
+        ? item.id.trim()
+        : typeof item.kit?.id === 'string' && item.kit.id.trim().length > 0
+        ? item.kit.id.trim()
+        : null;
+    if (!itemId || seenIds.has(itemId)) continue;
+    if (!Number.isInteger(item.quantity) || item.quantity < 1) continue;
+
+    const latestKit = catalogById.get(itemId);
+    if (!latestKit || !latestKit.inStock) continue;
+
+    seenIds.add(itemId);
+    next.push({ id: latestKit.id, kit: latestKit, quantity: item.quantity });
+  }
+
+  return next;
 }
 
 function getInitialDarkMode(): boolean {
@@ -127,6 +251,8 @@ const VALID_KIT_CATEGORIES = new Set([
   'Period & Cramp Care',
   'Personal Hygiene & Masks',
   'Sleep & Wellness',
+  'Eye, Ear & Skin Care',
+  'Single Strip & Quick-Grab Essentials',
 ]);
 
 const LEGACY_CATEGORY_UPGRADES: Record<string, ReliefKit['category']> = {
@@ -149,12 +275,30 @@ function getValidPhotoDataUrl(raw?: string | null): string | undefined {
 
 function sanitizeKitForFirestore(kit: ReliefKit): ReliefKit {
   const validPhotoDataUrl = getValidPhotoDataUrl(kit.photoDataUrl);
+  const cleanSkuCode =
+    typeof kit.skuCode === 'string' && kit.skuCode.trim().length >= 2
+      ? kit.skuCode.trim().slice(0, 32)
+      : undefined;
+  const cleanSubtitle =
+    typeof kit.subtitle === 'string' && kit.subtitle.trim().length > 0
+      ? kit.subtitle.trim().slice(0, 200)
+      : undefined;
+  const cleanSymptomTags = Array.isArray(kit.symptomTags)
+    ? kit.symptomTags
+        .filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+        .map((tag) => tag.trim())
+        .slice(0, 25)
+    : undefined;
+
   return {
     id: kit.id,
+    ...(cleanSkuCode ? { skuCode: cleanSkuCode } : {}),
     name: kit.name,
+    ...(cleanSubtitle ? { subtitle: cleanSubtitle } : {}),
     category: kit.category,
     price: kit.price,
     contents: kit.contents,
+    ...(cleanSymptomTags && cleanSymptomTags.length > 0 ? { symptomTags: cleanSymptomTags } : {}),
     reliefFor: kit.reliefFor,
     imagePath: kit.imagePath,
     ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
@@ -169,12 +313,26 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
   kitsToSync: ReliefKit[];
 } {
   const existingById = new globalThis.Map<string, RawFirestoreKit>();
-  existingKits.forEach((kit) => existingById.set(kit.id, kit));
+  existingKits.forEach((kit) => {
+    if (kit && typeof kit.id === 'string' && kit.id.trim().length > 0) {
+      const cleanId = kit.id.trim();
+      if (!existingById.has(cleanId)) {
+        existingById.set(cleanId, { ...kit, id: cleanId });
+      }
+    }
+  });
 
   const kitsToSync: ReliefKit[] = [];
   const merged: ReliefKit[] = [];
+  const seenIds = new Set<string>();
+  const seenSkus = new Set<string>();
 
   for (const starter of RELIEF_KITS) {
+    seenIds.add(starter.id);
+    if (starter.skuCode) {
+      seenSkus.add(starter.skuCode);
+    }
+
     const existing = existingById.get(starter.id);
     if (!existing) {
       merged.push(starter);
@@ -194,12 +352,18 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
 
       const hasBrokenOrOutdatedImage =
         !hasValidBundledPath || Boolean(existing.imageUrl);
+      const needsMetadataUpgrade =
+        (existing.skuCode || '') !== (starter.skuCode || '') ||
+        (existing.subtitle || '') !== (starter.subtitle || '') ||
+        !Array.isArray(existing.symptomTags) ||
+        existing.symptomTags.length === 0;
       const needsStarterUpgrade =
         !hasValidCategory ||
         existing.name !== starter.name ||
         existing.price !== starter.price ||
         existing.category !== starter.category ||
-        hasBrokenOrOutdatedImage;
+        hasBrokenOrOutdatedImage ||
+        needsMetadataUpgrade;
 
       const upgradedKit: ReliefKit = needsStarterUpgrade
         ? sanitizeKitForFirestore({
@@ -210,6 +374,7 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
           })
         : sanitizeKitForFirestore({
             ...existing,
+            id: starter.id,
             imagePath: resolvedImagePath,
             ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
           });
@@ -222,7 +387,11 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
     }
   }
 
+  let customSkuCursor = merged.length + 1;
   for (const customKit of existingById.values()) {
+    if (!customKit.id || seenIds.has(customKit.id)) continue;
+    seenIds.add(customKit.id);
+
     const mappedCategory =
       LEGACY_CATEGORY_UPGRADES[customKit.category] ?? customKit.category;
     const normalizedCategory: ReliefKit['category'] = VALID_KIT_CATEGORIES.has(mappedCategory)
@@ -232,6 +401,19 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
     const validPhotoDataUrl = getValidPhotoDataUrl(customKit.photoDataUrl);
     const resolvedImage = resolveKitAssetUrl(rawImage, customKit.id, normalizedCategory);
 
+    let customSku =
+      typeof customKit.skuCode === 'string' && customKit.skuCode.trim().length >= 2
+        ? customKit.skuCode.trim().slice(0, 32)
+        : '';
+    if (!customSku || seenSkus.has(customSku)) {
+      while (seenSkus.has(`QCC-${String(customSkuCursor).padStart(3, '0')}`)) {
+        customSkuCursor += 1;
+      }
+      customSku = `QCC-${String(customSkuCursor).padStart(3, '0')}`;
+      customSkuCursor += 1;
+    }
+    seenSkus.add(customSku);
+
     if (validPhotoDataUrl) {
       writeCachedPhoto(customKit.id, validPhotoDataUrl, resolvedImage);
     }
@@ -240,10 +422,12 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
       normalizedCategory !== customKit.category ||
       !isValidBundledKitImagePath(rawImage) ||
       resolvedImage !== customKit.imagePath ||
-      Boolean(customKit.imageUrl);
+      Boolean(customKit.imageUrl) ||
+      customSku !== (customKit.skuCode || '');
 
     const normalizedCustom = sanitizeKitForFirestore({
       ...customKit,
+      skuCode: customSku,
       category: normalizedCategory,
       imagePath: resolvedImage,
       ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
@@ -283,10 +467,8 @@ export default function App() {
   const [kits, setKits] = useState<ReliefKit[]>(RELIEF_KITS);
   const syncedKitSignaturesRef = useRef<Set<string>>(new Set());
 
-  // Ordering state
-  const [cart, setCart] = useState<CartItem[]>([
-    { kit: RELIEF_KITS[0], quantity: 1 },
-  ]);
+  // Ordering state (hydrated from sanitized storage, defaulting to empty cart)
+  const [cart, setCart] = useState<CartItem[]>(() => loadSanitizedCart(RELIEF_KITS));
   const [orderPin, setOrderPin] = useState<LatLngLiteral>(PHARMACY_ORIGIN);
   const [roomNumber, setRoomNumber] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -499,6 +681,18 @@ export default function App() {
     prevOrderStatusMapRef.current = nextMap;
   }, [orders, ordersLoaded, pushLocalAndBrowserAlert]);
 
+  // Persist sanitized cart state in localStorage
+  useEffect(() => {
+    if (cart.length === 0) {
+      clearCartStorage();
+      return;
+    }
+    const cleanPayload = cart
+      .filter((item) => typeof item.id === 'string' && item.id.trim().length > 0 && item.quantity > 0)
+      .map((item) => ({ id: item.id, quantity: item.quantity }));
+    writeStorageJson(CART_STORAGE_KEY, cleanPayload);
+  }, [cart]);
+
   // Apply adaptive dark/light mode to root document
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDarkMode);
@@ -574,6 +768,8 @@ export default function App() {
         setActiveTab('order');
         setPrefilledPhone(null);
         setKits(RELIEF_KITS);
+        setCart([]);
+        clearCartStorage();
         syncedKitSignaturesRef.current.clear();
       }
     });
@@ -619,7 +815,7 @@ export default function App() {
           setKits(RELIEF_KITS);
           if (isCampusAdmin) {
             for (const kit of RELIEF_KITS) {
-              const signature = `${kit.id}:${kit.imagePath}:${kit.photoDataUrl ? kit.photoDataUrl.length : 0}`;
+              const signature = `${kit.id}:${kit.skuCode ?? ''}:${kit.subtitle ?? ''}:${kit.imagePath}:${kit.photoDataUrl ? kit.photoDataUrl.length : 0}`;
               if (syncedKitSignaturesRef.current.has(signature)) continue;
               syncedKitSignaturesRef.current.add(signature);
               setDoc(doc(db, 'kits', kit.id), {
@@ -633,12 +829,19 @@ export default function App() {
           return;
         }
 
-        const loadedKits = snapshot.docs.map((d) => d.data() as RawFirestoreKit);
+        const loadedKits: RawFirestoreKit[] = snapshot.docs.map((d) => {
+          const data = d.data() as RawFirestoreKit;
+          const validDocId =
+            typeof data.id === 'string' && data.id.trim().length > 0
+              ? data.id.trim()
+              : d.id;
+          return { ...data, id: validDocId };
+        });
         const { merged, kitsToSync } = mergeCatalogWithDefaults(loadedKits);
 
         if (isCampusAdmin && kitsToSync.length > 0) {
           for (const kit of kitsToSync) {
-            const signature = `${kit.id}:${kit.imagePath}:${kit.photoDataUrl ? kit.photoDataUrl.length : 0}`;
+            const signature = `${kit.id}:${kit.skuCode ?? ''}:${kit.subtitle ?? ''}:${kit.imagePath}:${kit.photoDataUrl ? kit.photoDataUrl.length : 0}`;
             if (syncedKitSignaturesRef.current.has(signature)) continue;
             syncedKitSignaturesRef.current.add(signature);
             setDoc(doc(db, 'kits', kit.id), {
@@ -652,14 +855,7 @@ export default function App() {
 
         setKits(merged);
 
-        setCart((prev) =>
-          prev
-            .map((item) => {
-              const latest = merged.find((k) => k.id === item.kit.id);
-              return latest ? { ...item, kit: latest } : item;
-            })
-            .filter((item) => item.kit.inStock)
-        );
+        setCart((prev) => sanitizeCartAgainstCatalog(prev, merged));
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, kitsPath);
@@ -772,6 +968,8 @@ export default function App() {
     setSelectedOrderId(null);
     setRoleMode('student');
     setActiveTab('order');
+    setCart([]);
+    clearCartStorage();
     setPrefilledPhone(null);
     setEditingProfile(false);
   };
@@ -796,28 +994,41 @@ export default function App() {
   }, [orders]);
 
   const handleAddKit = (kit: ReliefKit) => {
-    if (!kit.inStock) return;
+    if (!kit || typeof kit.id !== 'string' || !kit.id.trim() || !kit.inStock) return;
+    const targetId = kit.id.trim();
     setFormError(null);
     setCart((prev) => {
-      const existing = prev.find((item) => item.kit.id === kit.id);
-      if (existing) {
+      const alreadyAdded = prev.some(
+        (item) => typeof item.id === 'string' && item.id.length > 0 && item.id === targetId
+      );
+      if (alreadyAdded) {
         return prev.map((item) =>
-          item.kit.id === kit.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === targetId
+            ? { ...item, kit, quantity: item.quantity + 1 }
+            : item
         );
       }
-      return [...prev, { kit, quantity: 1 }];
+      return [...prev, { id: targetId, kit, quantity: 1 }];
     });
   };
 
   const handleUpdateQuantity = (kitId: string, delta: number) => {
+    if (typeof kitId !== 'string' || !kitId.trim() || !Number.isFinite(delta)) return;
+    const targetId = kitId.trim();
     setFormError(null);
     setCart((prev) =>
       prev
         .map((item) =>
-          item.kit.id === kitId ? { ...item, quantity: item.quantity + delta } : item
+          item.id === targetId ? { ...item, quantity: item.quantity + delta } : item
         )
-        .filter((item) => item.quantity > 0)
+        .filter((item) => typeof item.id === 'string' && item.id.length > 0 && item.quantity > 0)
     );
+  };
+
+  const handleClearCart = () => {
+    setFormError(null);
+    setCart([]);
+    clearCartStorage();
   };
 
   const handleReorderKits = (
@@ -826,15 +1037,23 @@ export default function App() {
   ) => {
     setFormError(null);
     const kitsById = new globalThis.Map<string, ReliefKit>();
-    kits.forEach((kit) => kitsById.set(kit.id, kit));
+    kits.forEach((kit) => {
+      if (typeof kit.id === 'string' && kit.id.trim().length > 0) {
+        kitsById.set(kit.id.trim(), kit);
+      }
+    });
 
     const availableEntries: CartItem[] = [];
     const unavailableNames: string[] = [];
 
     order.items.forEach((item) => {
-      const catalogKit = kitsById.get(item.kitId);
+      const catalogKit = typeof item.kitId === 'string' ? kitsById.get(item.kitId.trim()) : undefined;
       if (catalogKit && catalogKit.inStock) {
-        availableEntries.push({ kit: catalogKit, quantity: item.quantity });
+        availableEntries.push({
+          id: catalogKit.id,
+          kit: catalogKit,
+          quantity: Math.max(1, Math.round(item.quantity)),
+        });
       } else {
         unavailableNames.push(item.name);
       }
@@ -851,12 +1070,12 @@ export default function App() {
 
     setCart((prev) => {
       const next = [...prev];
-      availableEntries.forEach(({ kit, quantity }) => {
-        const idx = next.findIndex((c) => c.kit.id === kit.id);
+      availableEntries.forEach(({ id, kit, quantity }) => {
+        const idx = next.findIndex((c) => c.id === id);
         if (idx >= 0) {
-          next[idx] = { ...next[idx], kit, quantity: next[idx].quantity + quantity };
+          next[idx] = { id, kit, quantity: next[idx].quantity + quantity };
         } else {
-          next.push({ kit, quantity });
+          next.push({ id, kit, quantity });
         }
       });
       return next;
@@ -890,7 +1109,9 @@ export default function App() {
     });
     setCart((prev) =>
       prev
-        .map((item) => (item.kit.id === updatedKit.id ? { ...item, kit: updatedKit } : item))
+        .map((item) =>
+          item.id === updatedKit.id ? { ...item, id: updatedKit.id, kit: updatedKit } : item
+        )
         .filter((item) => item.kit.inStock)
     );
   };
@@ -1441,6 +1662,7 @@ export default function App() {
               cart={cart}
               onAddKit={handleAddKit}
               onUpdateQuantity={handleUpdateQuantity}
+              onClearCart={handleClearCart}
               orderPin={orderPin}
               onChangeOrderPin={setOrderPin}
               roomNumber={roomNumber}

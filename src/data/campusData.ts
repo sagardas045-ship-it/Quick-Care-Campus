@@ -11,6 +11,8 @@ export const SYMPTOM_FILTERS: SymptomCategory[] = [
   'Period & Cramp Care',
   'Personal Hygiene & Masks',
   'Sleep & Wellness',
+  'Eye, Ear & Skin Care',
+  'Single Strip & Quick-Grab Essentials',
 ];
 
 // 24/7 Partner Pharmacy Hub (Premnagar / Chakrata Rd belt, Dehradun)
@@ -51,10 +53,14 @@ export const BREAK_EVEN_ORDERS = 172; // ₹6,020 fixed monthly pilot cost ÷ �
 export const BASELINE_PILOT_COMPLETED = 128;
 
 export const RELIEF_KITS: ReliefKit[] = [
-  // 1. Fever & Cold (3 items)
+  // ============================================================================
+  // 1. Fever & Cold (4 SKUs: QCC-001 to QCC-004)
+  // ============================================================================
   {
     id: 'kit-fever-flu',
+    skuCode: 'QCC-001',
     name: 'Midnight Fever & Flu Kit',
+    subtitle: 'Paracetamol 650mg + lozenges + thermometer strip & ORS',
     category: 'Fever & Cold',
     price: 110,
     contents: [
@@ -62,6 +68,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Soothing throat lozenges (8 pcs)',
       'Thermometer strip & Electral ORS sachet',
     ],
+    symptomTags: ['fever', 'bukhar', 'flu', 'paracetamol', 'dolo', 'crocin', 'chills', 'sore throat', 'body ache', 'temperature'],
     reliefFor: 'High fever, chills, sore throat & body ache',
     imagePath: KIT_ASSETS_BY_ID['kit-fever-flu'],
     etaMinutes: 16,
@@ -70,7 +77,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-steam-nasal',
+    skuCode: 'QCC-002',
     name: 'Blocked Nose & Steam Relief Pack',
+    subtitle: 'Vaporub jar + saline nasal spray + 2x menthol inhalers',
     category: 'Fever & Cold',
     price: 95,
     contents: [
@@ -78,6 +87,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Sterile saline nasal spray (30ml)',
       '2x Pocket menthol inhalers',
     ],
+    symptomTags: ['cold', 'sardi', 'zukam', 'blocked nose', 'nasal', 'steam', 'vicks', 'vaporub', 'inhaler', 'congestion', 'sinus'],
     reliefFor: 'Nasal congestion, blocked sinus & night cold relief',
     imagePath: KIT_ASSETS_BY_ID['kit-steam-nasal'],
     etaMinutes: 15,
@@ -86,7 +96,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-cough-soother',
+    skuCode: 'QCC-003',
     name: 'Dry Cough & Sore Throat Soothe Box',
+    subtitle: 'Honey cough syrup 150ml + gargle + 10 throat drops',
     category: 'Fever & Cold',
     price: 125,
     contents: [
@@ -94,17 +106,41 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Antiseptic warm gargle solution',
       'Honey-lemon throat drops (10 pcs)',
     ],
+    symptomTags: ['cough', 'khansi', 'dry cough', 'sore throat', 'throat', 'syrup', 'gargle', 'lozenges', 'hoarse'],
     reliefFor: 'Persistent dry night cough, tickly throat & hoarseness',
     imagePath: KIT_ASSETS_BY_ID['kit-cough-soother'],
     etaMinutes: 16,
     sealedCode: 'OTC-FC03',
     inStock: true,
   },
+  {
+    id: 'kit-paracetamol-strip',
+    skuCode: 'QCC-004',
+    name: 'Paracetamol 650mg Emergency Strip & Thermometer Pack',
+    subtitle: '15-tab strip + clinical digital thermometer',
+    category: 'Fever & Cold',
+    price: 65,
+    contents: [
+      'Paracetamol 650mg IP strip (15 tablets)',
+      'Digital clinical thermometer with beep alert',
+      'Alcohol prep wipe pad',
+    ],
+    symptomTags: ['paracetamol', 'dolo', 'dolo 650', 'crocin', 'fever', 'bukhar', 'thermometer', 'temperature', 'strip', 'body ache'],
+    reliefFor: 'Sudden night fever check, temperature spike & body ache',
+    imagePath: KIT_ASSETS_BY_ID['kit-paracetamol-strip'],
+    etaMinutes: 14,
+    sealedCode: 'OTC-FC04',
+    inStock: true,
+  },
 
-  // 2. Headache & Migraine (3 items)
+  // ============================================================================
+  // 2. Headache & Migraine (4 SKUs: QCC-005 to QCC-008)
+  // ============================================================================
   {
     id: 'kit-headache-acidity',
+    skuCode: 'QCC-005',
     name: 'Exam Night Headache & Stress Relief',
+    subtitle: 'Disprin/Saridon strip + cooling balm + blackout mask',
     category: 'Headache & Migraine',
     price: 85,
     contents: [
@@ -112,6 +148,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Roll-on cooling peppermint balm',
       'Soft blackout sleep mask',
     ],
+    symptomTags: ['headache', 'sir dard', 'saridon', 'disprin', 'stress', 'exam', 'balm', 'peppermint', 'tension'],
     reliefFor: 'Late-night exam tension headaches & study fatigue',
     imagePath: KIT_ASSETS_BY_ID['kit-headache-acidity'],
     etaMinutes: 15,
@@ -120,7 +157,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-sinus-eyecare',
+    skuCode: 'QCC-006',
     name: 'Sinus & Laptop Eye Strain Kit',
+    subtitle: 'Lubricating eye drops + pain strip + warm compress mask',
     category: 'Headache & Migraine',
     price: 120,
     contents: [
@@ -128,6 +167,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Fast-acting pain relief tablets',
       'Reusable warm eye compress mask',
     ],
+    symptomTags: ['sinus', 'eye strain', 'eye drops', 'screen fatigue', 'headache', 'dry eyes', 'laptop', 'brow ache'],
     reliefFor: 'Late-night screen dryness, sinus pressure & brow ache',
     imagePath: KIT_ASSETS_BY_ID['kit-sinus-eyecare'],
     etaMinutes: 16,
@@ -136,7 +176,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-migraine-darkroom',
+    skuCode: 'QCC-007',
     name: 'Migraine Dark-Room Recovery Pack',
+    subtitle: 'Migraine OTC strip + acupressure band + peppermint roll-on',
     category: 'Headache & Migraine',
     price: 145,
     contents: [
@@ -144,17 +186,41 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Woven acupressure wrist band',
       'Pure peppermint essential oil roll-on',
     ],
+    symptomTags: ['migraine', 'severe headache', 'throbbing', 'light sensitivity', 'nausea', 'headache', 'roll-on'],
     reliefFor: 'Throbbing one-sided migraine, light sensitivity & nausea',
     imagePath: KIT_ASSETS_BY_ID['kit-migraine-darkroom'],
     etaMinutes: 16,
     sealedCode: 'OTC-HM03',
     inStock: true,
   },
+  {
+    id: 'kit-cooling-gel-patches',
+    skuCode: 'QCC-008',
+    name: 'Instant Cooling Forehead Gel Patches & Balm Duo',
+    subtitle: '4 hydrogel fever/headache strips + roll-on',
+    category: 'Headache & Migraine',
+    price: 90,
+    contents: [
+      '4x Cooling hydrogel forehead gel patches',
+      'Menthol & eucalyptus headache roll-on (10ml)',
+      'Resealable cooling storage sleeve',
+    ],
+    symptomTags: ['headache', 'cooling patch', 'gel patch', 'forehead', 'migraine', 'fever', 'balm', 'roll-on', 'hydrogel'],
+    reliefFor: 'Instant forehead cooling for fever spikes & throbbing headaches',
+    imagePath: KIT_ASSETS_BY_ID['kit-cooling-gel-patches'],
+    etaMinutes: 15,
+    sealedCode: 'OTC-HM04',
+    inStock: true,
+  },
 
-  // 3. Stomach & Acidity (3 items)
+  // ============================================================================
+  // 3. Stomach & Acidity (4 SKUs: QCC-009 to QCC-012)
+  // ============================================================================
   {
     id: 'kit-canteen-acidity',
+    skuCode: 'QCC-009',
     name: 'Late-Night Canteen Acidity & Gas Pack',
+    subtitle: '3x Antacid gel + 2x Eno packs + digestive enzymes',
     category: 'Stomach & Acidity',
     price: 70,
     contents: [
@@ -162,6 +228,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       '2x Eno effervescent fruit salt packs',
       'Chewable digestive enzyme tablets',
     ],
+    symptomTags: ['acidity', 'gas', 'eno', 'antacid', 'heartburn', 'bloating', 'reflux', 'stomach', 'canteen', 'indigestion'],
     reliefFor: 'Midnight mess food heartburn, bloating & acid reflux',
     imagePath: KIT_ASSETS_BY_ID['kit-canteen-acidity'],
     etaMinutes: 14,
@@ -170,7 +237,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-tummy-recovery',
+    skuCode: 'QCC-010',
     name: 'Food Poisoning & Tummy Relief Kit',
+    subtitle: 'Probiotic strip + 2x ORS packs + anti-nausea tabs',
     category: 'Stomach & Acidity',
     price: 105,
     contents: [
@@ -178,6 +247,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       '2x Oral rehydration electrolyte packs',
       'Gentle anti-nausea OTC tablets',
     ],
+    symptomTags: ['vomit', 'vomiting', 'nausea', 'food poisoning', 'loose motion', 'diarrhea', 'stomach', 'tummy', 'cramp', 'probiotic', 'ors'],
     reliefFor: 'Acute stomach cramps, loose motions & upset digestion',
     imagePath: KIT_ASSETS_BY_ID['kit-tummy-recovery'],
     etaMinutes: 16,
@@ -186,7 +256,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-motion-indigestion',
+    skuCode: 'QCC-011',
     name: 'Motion Sickness & Indigestion Combo',
+    subtitle: 'Ginger nausea tabs + antacid strip + peppermint drops',
     category: 'Stomach & Acidity',
     price: 80,
     contents: [
@@ -194,17 +266,41 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Fast-relief chewable antacid strip',
       'Herbal digestive peppermint drops',
     ],
+    symptomTags: ['vomit', 'vomiting', 'nausea', 'motion sickness', 'indigestion', 'gas', 'stomach', 'acidity', 'queasy'],
     reliefFor: 'Travel nausea, queasiness & heavy late-night meals',
     imagePath: KIT_ASSETS_BY_ID['kit-motion-indigestion'],
     etaMinutes: 15,
     sealedCode: 'OTC-SA03',
     inStock: true,
   },
+  {
+    id: 'kit-acid-reflux-pack',
+    skuCode: 'QCC-012',
+    name: 'Midnight Acid-Reflux & Heartburn Relief Pack',
+    subtitle: 'Digene mint tablets, Pudin Hara pearls & peppermint tea',
+    category: 'Stomach & Acidity',
+    price: 60,
+    contents: [
+      'Digene mint chewable antacid tablets (15 tabs)',
+      'Pudin Hara cooling mint pearls (10 caps)',
+      '2x Soothing peppermint herbal tea sachets',
+    ],
+    symptomTags: ['acidity', 'digene', 'pudin hara', 'pudina', 'gas', 'heartburn', 'acid reflux', 'bloating', 'stomach', 'tea'],
+    reliefFor: 'Fast cooling relief for midnight heartburn, gas & sour burps',
+    imagePath: KIT_ASSETS_BY_ID['kit-acid-reflux-pack'],
+    etaMinutes: 14,
+    sealedCode: 'OTC-SA04',
+    inStock: true,
+  },
 
-  // 4. First-Aid & Sprains (3 items)
+  // ============================================================================
+  // 4. First-Aid & Sprains (4 SKUs: QCC-013 to QCC-016)
+  // ============================================================================
   {
     id: 'kit-first-aid',
+    skuCode: 'QCC-013',
     name: 'Hostel Room Minor Cut & Burn Kit',
+    subtitle: 'Antiseptic 30ml + gauze & band-aids + burn gel',
     category: 'First-Aid & Sprains',
     price: 140,
     contents: [
@@ -212,6 +308,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Sterile non-stick gauze & band-aids',
       'Soothing silver burn-relief gel',
     ],
+    symptomTags: ['first-aid', 'first aid', 'cut', 'burn', 'bleeding', 'wound', 'scrape', 'antiseptic', 'band-aid', 'gauze'],
     reliefFor: 'Minor cuts, kettle/iron burns, scrapes & dorm injuries',
     imagePath: KIT_ASSETS_BY_ID['kit-first-aid'],
     etaMinutes: 16,
@@ -220,7 +317,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-sports-sprain',
+    skuCode: 'QCC-014',
     name: 'Sports & Stairs Ankle Sprain Pack',
+    subtitle: 'Pain-relief spray 150ml + crepe bandage + cold gel pack',
     category: 'First-Aid & Sprains',
     price: 165,
     contents: [
@@ -228,6 +327,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Elastic compression crepe bandage',
       'Reusable cold gel ice pack',
     ],
+    symptomTags: ['sprain', 'ankle', 'twist', 'muscle pain', 'pain spray', 'crepe bandage', 'ice pack', 'swelling', 'sports', 'first-aid'],
     reliefFor: 'Ankle twists, campus football sprains & muscle pulls',
     imagePath: KIT_ASSETS_BY_ID['kit-sports-sprain'],
     etaMinutes: 17,
@@ -236,7 +336,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-skin-rash',
+    skuCode: 'QCC-015',
     name: 'Blister, Bruise & Mosquito Bite Relief',
+    subtitle: 'Calamine cream + hydrocolloid pads + repellent roll-on',
     category: 'First-Aid & Sprains',
     price: 115,
     contents: [
@@ -244,17 +346,41 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Hydrocolloid blister healing pads',
       'Botanical mosquito repellent roll-on',
     ],
+    symptomTags: ['blister', 'bruise', 'mosquito', 'bite', 'rash', 'itch', 'calamine', 'skin', 'first-aid'],
     reliefFor: 'Shoe blisters, hostel mosquito bites & skin irritation',
     imagePath: KIT_ASSETS_BY_ID['kit-skin-rash'],
     etaMinutes: 15,
     sealedCode: 'OTC-FA03',
     inStock: true,
   },
+  {
+    id: 'kit-pain-spray-combo',
+    skuCode: 'QCC-016',
+    name: 'Volini / Moov Instant Pain Relief Spray & Bandage Combo',
+    subtitle: '40g spray + elastic wrist/ankle wrap',
+    category: 'First-Aid & Sprains',
+    price: 135,
+    contents: [
+      'Volini / Moov rapid pain relief spray (40g)',
+      'Stretchable elastic wrist & ankle wrap',
+      '2x Metal securing bandage clips',
+    ],
+    symptomTags: ['volini', 'moov', 'spray', 'pain spray', 'sprain', 'wrist', 'ankle', 'back pain', 'muscle', 'bandage', 'first-aid'],
+    reliefFor: 'Instant muscle spasm, neck stiffness, wrist & ankle sprains',
+    imagePath: KIT_ASSETS_BY_ID['kit-pain-spray-combo'],
+    etaMinutes: 15,
+    sealedCode: 'OTC-FA04',
+    inStock: true,
+  },
 
-  // 5. Hydration & Energy (3 items)
+  // ============================================================================
+  // 5. Hydration & Energy (4 SKUs: QCC-017 to QCC-020)
+  // ============================================================================
   {
     id: 'kit-dehydration',
+    skuCode: 'QCC-017',
     name: 'Dehydration & Recovery Combo',
+    subtitle: '2x Electral ORS + Glucose-D + Vitamin C chewables',
     category: 'Hydration & Energy',
     price: 75,
     contents: [
@@ -262,6 +388,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Glucose-D instant energy pack',
       'Vitamin C immunity chewables',
     ],
+    symptomTags: ['dehydration', 'ors', 'electral', 'glucose', 'dizzy', 'dizziness', 'weakness', 'energy', 'exhaustion', 'recovery'],
     reliefFor: 'Exhaustion, dizziness, fluid loss & post-fever recovery',
     imagePath: KIT_ASSETS_BY_ID['kit-dehydration'],
     etaMinutes: 14,
@@ -270,7 +397,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-study-hydration',
+    skuCode: 'QCC-018',
     name: 'All-Nighter Study Hydration Box',
+    subtitle: '3x Electrolyte sachets + dark chocolate + green tea',
     category: 'Hydration & Energy',
     price: 90,
     contents: [
@@ -278,6 +407,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       '70% Dark chocolate energy bar',
       'Antioxidant green tea sachets',
     ],
+    symptomTags: ['hydration', 'electrolyte', 'ors', 'study', 'all-nighter', 'energy', 'fatigue', 'tired', 'dehydration'],
     reliefFor: 'Sustained late-night exam prep without caffeine crash',
     imagePath: KIT_ASSETS_BY_ID['kit-study-hydration'],
     etaMinutes: 15,
@@ -286,7 +416,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-fatigue-reset',
+    skuCode: 'QCC-019',
     name: 'Morning Hangover & Fatigue Reset Kit',
+    subtitle: 'Hydration fizz tube + B-complex strip + restore mints',
     category: 'Hydration & Energy',
     price: 130,
     contents: [
@@ -294,17 +426,41 @@ export const RELIEF_KITS: ReliefKit[] = [
       'B-complex energy boost strip',
       'Cooling peppermint restore mints',
     ],
+    symptomTags: ['hangover', 'fatigue', 'tired', 'groggy', 'dehydration', 'hydration', 'b-complex', 'energy', 'electrolyte'],
     reliefFor: '8 AM class grogginess, dehydration & low energy reset',
     imagePath: KIT_ASSETS_BY_ID['kit-fatigue-reset'],
     etaMinutes: 15,
     sealedCode: 'OTC-HE03',
     inStock: true,
   },
+  {
+    id: 'kit-electral-ors-4pack',
+    skuCode: 'QCC-020',
+    name: '4-Pack Electral ORS & Lemon Electrolyte Blitz',
+    subtitle: '4 WHO-formula ORS sachets + Vitamin C fizz tablets',
+    category: 'Hydration & Energy',
+    price: 85,
+    contents: [
+      '4x Electral WHO-formula ORS powder sachets',
+      'Lemon Vitamin C + Zinc effervescent fizz tablets',
+      '1x Graduated mixing pouch card',
+    ],
+    symptomTags: ['ors', 'electral', 'electrolyte', 'dehydration', 'lemon', 'vitamin c', 'dizziness', 'weakness', 'rehydration'],
+    reliefFor: 'Rapid electrolyte replacement after heat, fever, or vomiting',
+    imagePath: KIT_ASSETS_BY_ID['kit-electral-ors-4pack'],
+    etaMinutes: 14,
+    sealedCode: 'OTC-HE04',
+    inStock: true,
+  },
 
-  // 6. Period & Cramp Care (3 items)
+  // ============================================================================
+  // 6. Period & Cramp Care (4 SKUs: QCC-021 to QCC-024)
+  // ============================================================================
   {
     id: 'kit-period-care',
+    skuCode: 'QCC-021',
     name: 'Period Care & Cramp Relief Box',
+    subtitle: 'Cotton pads + warming heat patch + cramp relief strip',
     category: 'Period & Cramp Care',
     price: 150,
     contents: [
@@ -312,6 +468,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Self-warming adhesive heat patch',
       'Anti-spasmodic OTC cramp relief strip',
     ],
+    symptomTags: ['period', 'pads', 'sanitary', 'cramp', 'cramps', 'heat patch', 'menstrual', 'pain'],
     reliefFor: 'Discreet late-night menstrual care & acute cramps',
     imagePath: KIT_ASSETS_BY_ID['kit-period-care'],
     etaMinutes: 16,
@@ -320,7 +477,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-intimate-comfort',
+    skuCode: 'QCC-022',
     name: 'Intimate Hygiene & Comfort Pack',
+    subtitle: 'pH wipes + cotton liners + mini hot water pouch',
     category: 'Period & Cramp Care',
     price: 135,
     contents: [
@@ -328,6 +487,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Breathable cotton panty liners',
       'Mini knitted hot water comfort pouch',
     ],
+    symptomTags: ['period', 'intimate', 'wipes', 'liners', 'hot water', 'cramp', 'comfort', 'pads'],
     reliefFor: 'Overnight comfort, gentle hygiene & soothing warmth',
     imagePath: KIT_ASSETS_BY_ID['kit-intimate-comfort'],
     etaMinutes: 16,
@@ -336,7 +496,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-heavy-flow',
+    skuCode: 'QCC-023',
     name: 'Heavy Flow Overnight Protection Kit',
+    subtitle: 'XL overnight cotton pads + disposal bags + chamomile tea',
     category: 'Period & Cramp Care',
     price: 120,
     contents: [
@@ -344,17 +506,41 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Biodegradable sanitary disposal bags',
       'Soothing chamomile herbal tea sachets',
     ],
+    symptomTags: ['period', 'pads', 'heavy flow', 'overnight', 'xl pads', 'sanitary', 'menstrual', 'tea'],
     reliefFor: 'Leak-free overnight sleep & restful menstrual comfort',
     imagePath: KIT_ASSETS_BY_ID['kit-heavy-flow'],
     etaMinutes: 16,
     sealedCode: 'OTC-PC03',
     inStock: true,
   },
+  {
+    id: 'kit-overnight-pads-heatpad',
+    skuCode: 'QCC-024',
+    name: 'Whisper/Sofy XL Overnight Pads + Electric/Gel Heat Pad Refill',
+    subtitle: '12 XL pads + reusable gel warmer',
+    category: 'Period & Cramp Care',
+    price: 160,
+    contents: [
+      'Whisper / Sofy XL Overnight sanitary pads (12 pcs)',
+      'Reusable snap-heat gel cramp warmer pad',
+      'Soft fleece protective sleeve',
+    ],
+    symptomTags: ['whisper', 'sofy', 'pads', 'xl pads', 'overnight', 'period', 'heat pad', 'gel warmer', 'cramp', 'cramps'],
+    reliefFor: 'Full-night leak protection & instant soothing heat for period cramps',
+    imagePath: KIT_ASSETS_BY_ID['kit-overnight-pads-heatpad'],
+    etaMinutes: 16,
+    sealedCode: 'OTC-PC04',
+    inStock: true,
+  },
 
-  // 7. Personal Hygiene & Masks (3 items)
+  // ============================================================================
+  // 7. Personal Hygiene & Masks (4 SKUs: QCC-025 to QCC-028)
+  // ============================================================================
   {
     id: 'kit-flu-hygiene',
+    skuCode: 'QCC-025',
     name: 'Hostel Flu Protection & Hygiene Kit',
+    subtitle: '3x N95 masks + 70% sanitizer spray + surface wipes',
     category: 'Personal Hygiene & Masks',
     price: 80,
     contents: [
@@ -362,6 +548,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       '70% alcohol pocket sanitizer spray',
       'Antibacterial hand & surface wipes',
     ],
+    symptomTags: ['mask', 'masks', 'n95', 'sanitizer', 'wipes', 'hygiene', 'flu', 'cough', 'cold'],
     reliefFor: 'Shared dorm flu protection & germ hygiene during exams',
     imagePath: KIT_ASSETS_BY_ID['kit-flu-hygiene'],
     etaMinutes: 14,
@@ -370,7 +557,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-dental-ulcer',
+    skuCode: 'QCC-026',
     name: 'Dental & Mouth Ulcer Emergency Pack',
+    subtitle: 'Ulcer gel tube + sensitive toothpaste + mouthwash',
     category: 'Personal Hygiene & Masks',
     price: 95,
     contents: [
@@ -378,6 +567,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Desensitizing fluoride toothpaste',
       'Alcohol-free antiseptic mouthwash',
     ],
+    symptomTags: ['ulcer', 'mouth ulcer', 'chhale', 'tooth', 'toothache', 'dental', 'gum', 'mouthwash', 'toothpaste'],
     reliefFor: 'Painful mouth ulcers, midnight tooth sensitivity & gum care',
     imagePath: KIT_ASSETS_BY_ID['kit-dental-ulcer'],
     etaMinutes: 15,
@@ -386,7 +576,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-lens-ear-care',
+    skuCode: 'QCC-027',
     name: 'Contact Lens & Ear Care Essentials',
+    subtitle: 'Lens solution 60ml + dual case + soothing ear drops',
     category: 'Personal Hygiene & Masks',
     price: 130,
     contents: [
@@ -394,17 +586,41 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Sealed dual contact lens storage case',
       'Soothing ear-ache relief OTC drops',
     ],
+    symptomTags: ['lens', 'contact lens', 'lens solution', 'ear', 'ear drops', 'earache', 'eye', 'hygiene'],
     reliefFor: 'Dry contact lenses during late study & mild ear discomfort',
     imagePath: KIT_ASSETS_BY_ID['kit-lens-ear-care'],
     etaMinutes: 15,
     sealedCode: 'OTC-PH03',
     inStock: true,
   },
+  {
+    id: 'kit-washroom-hygiene-pouch',
+    skuCode: 'QCC-028',
+    name: 'Hostel Washroom & Travel Hygiene Emergency Pouch',
+    subtitle: 'Toilet seat sanitizer spray, wet wipes, pocket soap strips',
+    category: 'Personal Hygiene & Masks',
+    price: 75,
+    contents: [
+      'Toilet seat sanitizer disinfectant spray (50ml)',
+      'Flushable antibacterial wet wipes (20 pcs)',
+      'Pocket dissolving paper soap strips (50 sheets)',
+    ],
+    symptomTags: ['washroom', 'toilet', 'sanitizer', 'wet wipes', 'wipes', 'soap', 'travel', 'hygiene', 'hostel'],
+    reliefFor: 'Shared hostel washroom sanitization, travel & germ protection',
+    imagePath: KIT_ASSETS_BY_ID['kit-washroom-hygiene-pouch'],
+    etaMinutes: 14,
+    sealedCode: 'OTC-PH04',
+    inStock: true,
+  },
 
-  // 8. Sleep & Wellness (3 items)
+  // ============================================================================
+  // 8. Sleep & Wellness (4 SKUs: QCC-029 to QCC-032)
+  // ============================================================================
   {
     id: 'kit-deep-sleep',
+    skuCode: 'QCC-029',
     name: 'Hostel Noise & Deep Sleep Kit',
+    subtitle: 'Acoustic earplugs + 3D sleep mask + lavender mist',
     category: 'Sleep & Wellness',
     price: 110,
     contents: [
@@ -412,6 +628,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Contoured 3D blackout sleep mask',
       'Calming lavender pillow mist (30ml)',
     ],
+    symptomTags: ['sleep', 'insomnia', 'earplugs', 'noise', 'sleep mask', 'lavender', 'restless', 'hostel'],
     reliefFor: 'Loud hostel corridors, hallway lights & restless insomnia',
     imagePath: KIT_ASSETS_BY_ID['kit-deep-sleep'],
     etaMinutes: 15,
@@ -420,7 +637,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-calm-down',
+    skuCode: 'QCC-030',
     name: 'Exam Anxiety & Calm Down Box',
+    subtitle: 'Chamomile tea + matte stress ball + calming roll-on',
     category: 'Sleep & Wellness',
     price: 125,
     contents: [
@@ -428,6 +647,7 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Ergonomic matte teal stress squeeze ball',
       'Botanical aromatherapy roll-on bottle',
     ],
+    symptomTags: ['anxiety', 'stress', 'calm', 'exam', 'panic', 'nervous', 'sleep', 'chamomile', 'tea'],
     reliefFor: 'Pre-viva stress, late-night racing thoughts & tension',
     imagePath: KIT_ASSETS_BY_ID['kit-calm-down'],
     etaMinutes: 15,
@@ -436,7 +656,9 @@ export const RELIEF_KITS: ReliefKit[] = [
   },
   {
     id: 'kit-dry-skin-rescue',
+    skuCode: 'QCC-031',
     name: 'Lip & Dry Weather Skin Rescue',
+    subtitle: 'Soothing lip balm + moisturizer 75ml + barrier cream',
     category: 'Sleep & Wellness',
     price: 95,
     contents: [
@@ -444,10 +666,190 @@ export const RELIEF_KITS: ReliefKit[] = [
       'Fragrance-free daily moisturizer (75ml)',
       'Nourishing barrier repair hand cream',
     ],
+    symptomTags: ['dry skin', 'lip balm', 'chapped lips', 'moisturizer', 'winter', 'windburn', 'hand cream', 'skin'],
     reliefFor: 'Chapped winter Dehradun lips, dry hands & windburn',
     imagePath: KIT_ASSETS_BY_ID['kit-dry-skin-rescue'],
     etaMinutes: 15,
     sealedCode: 'OTC-SW03',
+    inStock: true,
+  },
+  {
+    id: 'kit-melatonin-free-sleep',
+    skuCode: 'QCC-032',
+    name: 'Melatonin-Free Herbal Sleep & Eye Rest Kit',
+    subtitle: 'Warming steam eye mask, lavender roll-on, chamomile sachets',
+    category: 'Sleep & Wellness',
+    price: 115,
+    contents: [
+      '2x Self-warming herbal steam eye masks',
+      'Calming lavender temple roll-on (10ml)',
+      '4x Melatonin-free chamomile sleep tea sachets',
+    ],
+    symptomTags: ['sleep', 'melatonin-free', 'herbal', 'eye mask', 'steam mask', 'lavender', 'chamomile', 'insomnia', 'eye rest'],
+    reliefFor: 'Natural drug-free sleep aid & tired eyes after late-night study',
+    imagePath: KIT_ASSETS_BY_ID['kit-melatonin-free-sleep'],
+    etaMinutes: 15,
+    sealedCode: 'OTC-SW04',
+    inStock: true,
+  },
+
+  // ============================================================================
+  // 9. Eye, Ear & Skin Care (NEW Category — 4 SKUs: QCC-033 to QCC-036)
+  // ============================================================================
+  {
+    id: 'kit-screen-eye-drops',
+    skuCode: 'QCC-033',
+    name: 'Late-Night Screen & Dust Eye Drop Relief Pack',
+    subtitle: 'Carboxymethylcellulose lubricating drops + sterile eye wipes',
+    category: 'Eye, Ear & Skin Care',
+    price: 95,
+    contents: [
+      'Carboxymethylcellulose 0.5% lubricating eye drops (10ml)',
+      '6x Individually sealed sterile eyelid cleansing wipes',
+      'Single-use saline eye wash vial',
+    ],
+    symptomTags: ['eye drops', 'eyes', 'dry eyes', 'red eyes', 'itchy eyes', 'dust', 'screen', 'carboxymethylcellulose', 'refresh'],
+    reliefFor: 'Dry, irritated, dusty or red eyes from late-night screens',
+    imagePath: KIT_ASSETS_BY_ID['kit-screen-eye-drops'],
+    etaMinutes: 15,
+    sealedCode: 'OTC-ES01',
+    inStock: true,
+  },
+  {
+    id: 'kit-fungal-skin-rash',
+    skuCode: 'QCC-034',
+    name: 'Hostel Water Fungal & Skin Rash Care Kit',
+    subtitle: 'Antifungal dusting powder, calamine soothing lotion, gauze',
+    category: 'Eye, Ear & Skin Care',
+    price: 110,
+    contents: [
+      'Clotrimazole antifungal dusting powder (100g)',
+      'Calamine soothing anti-itch lotion (100ml)',
+      'Sterile breathable cotton gauze pads (5 pcs)',
+    ],
+    symptomTags: ['rash', 'fungal', 'itch', 'itching', 'skin', 'calamine', 'antifungal', 'powder', 'allergy', 'ringworm', 'sweat rash'],
+    reliefFor: 'Hostel humidity rashes, itching, fungal skin irritation & chafing',
+    imagePath: KIT_ASSETS_BY_ID['kit-fungal-skin-rash'],
+    etaMinutes: 15,
+    sealedCode: 'OTC-ES02',
+    inStock: true,
+  },
+  {
+    id: 'kit-lip-crack-winter',
+    skuCode: 'QCC-035',
+    name: 'Cold Sore, Lip Crack & Winter Dryness Rescue',
+    subtitle: 'Medicated lip balm, petroleum jelly, barrier hand cream',
+    category: 'Eye, Ear & Skin Care',
+    price: 80,
+    contents: [
+      'Antiseptic medicated lip repair balm',
+      'Pure triple-purified petroleum jelly tub (50g)',
+      'Ceramide winter barrier hand cream (50ml)',
+    ],
+    symptomTags: ['lip crack', 'chapped lips', 'cold sore', 'lip balm', 'vaseline', 'petroleum jelly', 'dry skin', 'winter', 'skin'],
+    reliefFor: 'Cracked bleeding lips, cold sores & harsh Dehradun winter dryness',
+    imagePath: KIT_ASSETS_BY_ID['kit-lip-crack-winter'],
+    etaMinutes: 14,
+    sealedCode: 'OTC-ES03',
+    inStock: true,
+  },
+  {
+    id: 'kit-ear-wax-swimmer',
+    skuCode: 'QCC-036',
+    name: "Ear Wax & Swimmer's Ear Relief Drops Pack",
+    subtitle: 'Soothing ear drops, sterile cotton buds, microfiber cloth',
+    category: 'Eye, Ear & Skin Care',
+    price: 90,
+    contents: [
+      'Wax-softening & soothing OTC ear drops (10ml)',
+      'Sealed sterile paper-stem cotton buds (30 pcs)',
+      'Soft lint-free ear drying microfiber cloth',
+    ],
+    symptomTags: ['ear', 'ear drops', 'ear wax', 'earache', 'ear pain', 'swimmer ear', 'blocked ear', 'cotton buds'],
+    reliefFor: 'Blocked ear wax fullness, trapped shower water & mild ear discomfort',
+    imagePath: KIT_ASSETS_BY_ID['kit-ear-wax-swimmer'],
+    etaMinutes: 15,
+    sealedCode: 'OTC-ES04',
+    inStock: true,
+  },
+
+  // ============================================================================
+  // 10. Single Strip & Quick-Grab Essentials (NEW Category — 4 SKUs: QCC-037 to QCC-040)
+  // ============================================================================
+  {
+    id: 'kit-bandaid-20pack',
+    skuCode: 'QCC-037',
+    name: 'Band-Aid Washproof 20-Strip Pocket Box',
+    subtitle: 'Assorted sizes + antiseptic wipes',
+    category: 'Single Strip & Quick-Grab Essentials',
+    price: 50,
+    contents: [
+      '20x Washproof breathable adhesive band-aid strips',
+      '4x Alcohol antiseptic prep wipes',
+      'Pocket crush-proof sleeve box',
+    ],
+    symptomTags: ['band-aid', 'bandaid', 'bandage', 'strips', 'cut', 'cuts', 'shoe bite', 'blister', 'scrape', 'first-aid'],
+    reliefFor: 'Quick cuts, paper cuts, shoe bites & minor dorm scrapes',
+    imagePath: KIT_ASSETS_BY_ID['kit-bandaid-20pack'],
+    etaMinutes: 13,
+    sealedCode: 'OTC-QG01',
+    inStock: true,
+  },
+  {
+    id: 'kit-eno-6sachet',
+    skuCode: 'QCC-038',
+    name: 'Eno Fruit Salt & Antacid 6-Sachet Emergency Pack',
+    subtitle: 'Lemon & cola flavors for instant gas relief',
+    category: 'Single Strip & Quick-Grab Essentials',
+    price: 55,
+    contents: [
+      '4x Eno Lemon fruit salt sachets (5g each)',
+      '2x Eno Cola flavor antacid sachets (5g each)',
+      'Quick-tear single-dose foil packs',
+    ],
+    symptomTags: ['eno', 'fruit salt', 'acidity', 'gas', 'heartburn', 'bloating', 'indigestion', 'stomach', 'antacid'],
+    reliefFor: '6-second relief from sudden midnight acidity, gas & bloating',
+    imagePath: KIT_ASSETS_BY_ID['kit-eno-6sachet'],
+    etaMinutes: 13,
+    sealedCode: 'OTC-QG02',
+    inStock: true,
+  },
+  {
+    id: 'kit-strepsils-16drop',
+    skuCode: 'QCC-039',
+    name: 'Strepsils / Vicks Throat Lozenges 16-Drop Pack',
+    subtitle: 'Honey-lemon & menthol soothing drops',
+    category: 'Single Strip & Quick-Grab Essentials',
+    price: 45,
+    contents: [
+      '8x Honey-lemon antiseptic throat lozenges',
+      '8x Cool menthol eucalyptus throat drops',
+      '2x Sealed pocket blister strips',
+    ],
+    symptomTags: ['strepsils', 'vicks', 'lozenges', 'throat', 'sore throat', 'cough', 'khansi', 'drops', 'menthol', 'cold'],
+    reliefFor: 'Scratchy throat, dry cough & cold irritation before lectures',
+    imagePath: KIT_ASSETS_BY_ID['kit-strepsils-16drop'],
+    etaMinutes: 13,
+    sealedCode: 'OTC-QG03',
+    inStock: true,
+  },
+  {
+    id: 'kit-savlon-cotton-mini',
+    skuCode: 'QCC-040',
+    name: 'Savlon / Dettol Antiseptic Liquid & Cotton Roll Mini',
+    subtitle: '100ml antiseptic + 50g absorbent sterile cotton',
+    category: 'Single Strip & Quick-Grab Essentials',
+    price: 70,
+    contents: [
+      'Savlon / Dettol antiseptic disinfectant liquid (100ml)',
+      '50g 100% pure absorbent surgical cotton roll',
+      'Sealed waterproof hygiene zip bag',
+    ],
+    symptomTags: ['savlon', 'dettol', 'antiseptic', 'cotton', 'cotton roll', 'cut', 'wound', 'cleaning', 'disinfectant', 'first-aid'],
+    reliefFor: 'Wound disinfection, cut cleaning & everyday hostel first-aid',
+    imagePath: KIT_ASSETS_BY_ID['kit-savlon-cotton-mini'],
+    etaMinutes: 14,
+    sealedCode: 'OTC-QG04',
     inStock: true,
   },
 ];

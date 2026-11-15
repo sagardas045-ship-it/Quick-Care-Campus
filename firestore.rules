@@ -125,11 +125,14 @@ service cloud.firestore {
           'reliefFor', 'imagePath', 'etaMinutes', 'sealedCode', 'inStock', 'updatedAt'
         ]) &&
         data.keys().hasOnly([
-          'id', 'name', 'category', 'price', 'contents',
-          'reliefFor', 'imagePath', 'photoDataUrl', 'etaMinutes', 'sealedCode', 'inStock', 'updatedAt'
+          'id', 'skuCode', 'name', 'subtitle', 'category', 'price', 'contents',
+          'symptomTags', 'reliefFor', 'imagePath', 'photoDataUrl', 'etaMinutes',
+          'sealedCode', 'inStock', 'updatedAt'
         ]) &&
         data.id is string && data.id == kitId && data.id.size() <= 64 &&
+        (!('skuCode' in data) || (data.skuCode is string && data.skuCode.size() >= 2 && data.skuCode.size() <= 32)) &&
         data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+        (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 200)) &&
         data.category in [
           'Fever & Cold',
           'Headache & Migraine',
@@ -138,10 +141,13 @@ service cloud.firestore {
           'Hydration & Energy',
           'Period & Cramp Care',
           'Personal Hygiene & Masks',
-          'Sleep & Wellness'
+          'Sleep & Wellness',
+          'Eye, Ear & Skin Care',
+          'Single Strip & Quick-Grab Essentials'
         ] &&
         data.price is number && data.price >= 1 && data.price <= 10000 &&
         data.contents is list && data.contents.size() >= 1 && data.contents.size() <= 12 && data.contents[0] is string &&
+        (!('symptomTags' in data) || (data.symptomTags is list && data.symptomTags.size() <= 25 && (data.symptomTags.size() == 0 || data.symptomTags[0] is string))) &&
         data.reliefFor is string && data.reliefFor.size() >= 2 && data.reliefFor.size() <= 200 &&
         data.imagePath is string && data.imagePath.size() <= 500 &&
         (!('photoDataUrl' in data) || (data.photoDataUrl is string && data.photoDataUrl.size() <= 200000)) &&

@@ -31,6 +31,7 @@ interface CheckoutFormProps {
   profile: StudentProfile;
   cart: CartItem[];
   onUpdateQuantity: (kitId: string, delta: number) => void;
+  onClearCart?: () => void;
   orderPin: LatLngLiteral;
   onChangeOrderPin: (coords: LatLngLiteral) => void;
   roomNumber: string;
@@ -57,6 +58,7 @@ export function CheckoutForm({
   profile,
   cart,
   onUpdateQuantity,
+  onClearCart,
   orderPin,
   onChangeOrderPin,
   roomNumber,
@@ -131,22 +133,33 @@ export function CheckoutForm({
             Selected Relief Kits ({totalItems})
           </h3>
           {cart.length > 0 && (
-            <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-              Est. gate arrival 16 mins
-            </span>
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                Est. gate arrival 16 mins
+              </span>
+              {onClearCart && (
+                <button
+                  type="button"
+                  onClick={onClearCart}
+                  className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline underline-offset-2 rounded focus-visible:outline-2 focus-visible:outline-teal-600"
+                >
+                  Clear Cart
+                </button>
+              )}
+            </div>
           )}
         </div>
 
         {cart.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/70 p-4 text-center">
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Tap <span className="font-semibold text-slate-900 dark:text-slate-100">Add Kit</span> on any OTC kit to begin your 60-second emergency checkout.
+              Tap <span className="font-semibold text-slate-900 dark:text-slate-100">+ Add</span> on any OTC kit to begin your 60-second emergency checkout.
             </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90">
-            {cart.map(({ kit, quantity }) => (
-              <div key={kit.id} className="flex items-center justify-between gap-3 p-3">
+            {cart.map(({ id, kit, quantity }) => (
+              <div key={id} className="flex items-center justify-between gap-3 p-3">
                 <div className="w-16 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
                   <ProductPhoto product={kit} compact={true} />
                 </div>

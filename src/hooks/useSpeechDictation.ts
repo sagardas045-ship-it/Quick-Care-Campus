@@ -50,7 +50,10 @@ export type DictationStatus = 'idle' | 'requesting' | 'listening';
 
 interface UseSpeechDictationOptions {
   onFinalTranscript: (transcript: string) => void;
+  onInterimUpdate?: (transcript: string) => void;
   lang?: string;
+  continuous?: boolean;
+  permissionDeniedMessage?: string;
 }
 
 function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null {
@@ -59,12 +62,22 @@ function getSpeechRecognitionConstructor(): SpeechRecognitionConstructor | null 
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null;
 }
 
-function mapMediaErrorMessage(err: unknown): string {
+function isMediaPermissionDenied(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')
+  );
+}
+
+function mapMediaErrorMessage(err: unknown, customDeniedMsg?: string): string {
   if (err instanceof DOMException) {
     switch (err.name) {
       case 'NotAllowedError':
       case 'PermissionDeniedError':
-        return 'Microphone permission denied. Allow mic access in your browser settings to dictate.';
+        return (
+          customDeniedMsg ??
+          'Microphone permission denied. Allow mic access in your browser settings to dictate.'
+        );
       case 'NotFoundError':
       case 'DevicesNotFoundError':
         return 'No microphone detected on this device.';
@@ -78,11 +91,14 @@ function mapMediaErrorMessage(err: unknown): string {
   return 'Could not access microphone. Please type your instructions instead.';
 }
 
-function mapRecognitionErrorMessage(code: string): string {
+function mapRecognitionErrorMessage(code: string, customDeniedMsg?: string): string {
   switch (code) {
     case 'not-allowed':
     case 'service-not-allowed':
-      return 'Microphone permission denied. Allow mic access in your browser settings to dictate.';
+      return (
+        customDeniedMsg ??
+        'Microphone permission denied. Allow mic access in your browser settings to dictate.'
+      );
     case 'audio-capture':
       return 'No working microphone found on this device.';
     case 'no-speech':
@@ -90,25 +106,34 @@ function mapRecognitionErrorMessage(code: string): string {
     case 'network':
       return 'Speech recognition network error. Check connection or type manually.';
     default:
-      return 'Voice dictation interrupted. Tap the mic to retry.';
+      return 'Voice recognition interrupted. Tap the mic to retry.';
   }
 }
 
 export function useSpeechDictation({
   onFinalTranscript,
+  onInterimUpdate,
   lang = 'en-IN',
+  continuous = true,
+  permissionDeniedMessage,
 }: UseSpeechDictationOptions) {
   const [status, setStatus] = useState<DictationStatus>('idle');
   const [interimTranscript, setInterimTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isPermissionDenied, setIsPermissionDenied] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const intentionalStopRef = useRef(false);
   const onFinalTranscriptRef = useRef(onFinalTranscript);
+  const onInterimUpdateRef = useRef(onInterimUpdate);
 
   useEffect(() => {
     onFinalTranscriptRef.current = onFinalTranscript;
   }, [onFinalTranscript]);
+
+  useEffect(() => {
+    onInterimUpdateRef.current = onInterimUpdate;
+  }, [onInterimUpdate]);
 
   const isSupported = getSpeechRecognitionConstructor() !== null;
 
@@ -128,15 +153,17 @@ export function useSpeechDictation({
 
   const clearError = useCallback(() => {
     setError(null);
+    setIsPermissionDenied(false);
   }, []);
 
   const startDictation = useCallback(async () => {
     setError(null);
+    setIsPermissionDenied(false);
     setInterimTranscript('');
 
     const RecognitionCtor = getSpeechRecognitionConstructor();
     if (!RecognitionCtor) {
-      setError('Voice dictation is unavailable in this browser. Type your instructions above.');
+      setError('Voice search is unavailable in this browser — type your symptom or tap a quick tag below.');
       return;
     }
 
@@ -152,7 +179,8 @@ export function useSpeechDictation({
         stream.getTracks().forEach((track) => track.stop());
       } catch (err) {
         setStatus('idle');
-        setError(mapMediaErrorMessage(err));
+        setIsPermissionDenied(isMediaPermissionDenied(err));
+        setError(mapMediaErrorMessage(err, permissionDeniedMessage));
         return;
       }
     }
@@ -160,13 +188,14 @@ export function useSpeechDictation({
     try {
       const recognition = new RecognitionCtor();
       intentionalStopRef.current = false;
-      recognition.continuous = true;
+      recognition.continuous = continuous;
       recognition.interimResults = true;
       recognition.lang = lang;
 
       recognition.onstart = () => {
         setStatus('listening');
         setError(null);
+        setIsPermissionDenied(false);
       };
 
       recognition.onresult = (event) => {
@@ -183,7 +212,12 @@ export function useSpeechDictation({
           }
         }
 
-        setInterimTranscript(interimText.trim());
+        const cleanedInterim = interimText.trim();
+        setInterimTranscript(cleanedInterim);
+        if (cleanedInterim) {
+          onInterimUpdateRef.current?.(cleanedInterim);
+        }
+
         const cleanedFinal = finalText.trim();
         if (cleanedFinal) {
           onFinalTranscriptRef.current(cleanedFinal);
@@ -194,7 +228,10 @@ export function useSpeechDictation({
         if (intentionalStopRef.current && event.error === 'aborted') {
           return;
         }
-        setError(mapRecognitionErrorMessage(event.error));
+        const denied =
+          event.error === 'not-allowed' || event.error === 'service-not-allowed';
+        setIsPermissionDenied(denied);
+        setError(mapRecognitionErrorMessage(event.error, permissionDeniedMessage));
         setInterimTranscript('');
         setStatus('idle');
       };
@@ -210,9 +247,9 @@ export function useSpeechDictation({
     } catch {
       recognitionRef.current = null;
       setStatus('idle');
-      setError('Could not start voice dictation. Please type your instructions.');
+      setError('Could not start voice search. Please type your symptom or tap a quick tag below.');
     }
-  }, [lang, status, stopDictation]);
+  }, [continuous, lang, permissionDeniedMessage, status, stopDictation]);
 
   const toggleDictation = useCallback(() => {
     if (status === 'listening' || status === 'requesting') {
@@ -243,6 +280,7 @@ export function useSpeechDictation({
     isListening: status === 'listening',
     interimTranscript,
     error,
+    isPermissionDenied,
     startDictation,
     stopDictation,
     toggleDictation,

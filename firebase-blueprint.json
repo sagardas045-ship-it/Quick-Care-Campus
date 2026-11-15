@@ -99,7 +99,9 @@
       "type": "object",
       "properties": {
         "id": { "type": "string", "minLength": 2, "maxLength": 64 },
+        "skuCode": { "type": "string", "minLength": 2, "maxLength": 32 },
         "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "subtitle": { "type": "string", "minLength": 0, "maxLength": 200 },
         "category": {
           "type": "string",
           "enum": [
@@ -110,11 +112,14 @@
             "Hydration & Energy",
             "Period & Cramp Care",
             "Personal Hygiene & Masks",
-            "Sleep & Wellness"
+            "Sleep & Wellness",
+            "Eye, Ear & Skin Care",
+            "Single Strip & Quick-Grab Essentials"
           ]
         },
         "price": { "type": "number" },
         "contents": { "type": "array" },
+        "symptomTags": { "type": "array" },
         "reliefFor": { "type": "string", "minLength": 2, "maxLength": 200 },
         "imagePath": { "type": "string", "minLength": 0, "maxLength": 500 },
         "photoDataUrl": { "type": "string", "minLength": 0, "maxLength": 200000 },

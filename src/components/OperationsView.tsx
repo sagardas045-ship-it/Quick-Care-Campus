@@ -42,12 +42,14 @@ import { CATEGORY_FALLBACK_ASSETS } from '../data/kitAssets';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { CampusOrder, OrderFeedback, ReliefKit, SymptomCategory } from '../types';
 import { ProductPhoto } from './ProductPhoto';
+import { SymptomSearchBar } from './SymptomSearchBar';
 import {
   compressImageToDataUrl,
   regenerateStudioPhotoForKit,
   writeCachedPhoto,
 } from '../utils/photoCache';
 import { syncSharedTrackerStatus } from '../utils/sharedTracker';
+import { filterKitsBySearch } from '../utils/symptomSearch';
 
 interface OperationsViewProps {
   orders: CampusOrder[];
@@ -73,6 +75,8 @@ const KIT_CATEGORIES: KitCategory[] = [
   'Period & Cramp Care',
   'Personal Hygiene & Masks',
   'Sleep & Wellness',
+  'Eye, Ear & Skin Care',
+  'Single Strip & Quick-Grab Essentials',
 ];
 
 const STATUS_LABELS: Record<CampusOrder['status'], { text: string; tone: string }> = {
@@ -107,6 +111,7 @@ export function OperationsView({
 
   // Inventory manager state
   const [inventoryCategory, setInventoryCategory] = useState<SymptomCategory>('All Kits');
+  const [inventorySearch, setInventorySearch] = useState('');
   const [updatingKitId, setUpdatingKitId] = useState<string | null>(null);
   const [regeneratingKitId, setRegeneratingKitId] = useState<string | null>(null);
   const [uploadingKitId, setUploadingKitId] = useState<string | null>(null);
@@ -219,13 +224,32 @@ export function OperationsView({
       kit.photoDataUrl.length <= 200000
         ? kit.photoDataUrl
         : null;
+    const cleanSkuCode =
+      typeof kit.skuCode === 'string' && kit.skuCode.trim().length >= 2
+        ? kit.skuCode.trim().slice(0, 32)
+        : null;
+    const cleanSubtitle =
+      typeof kit.subtitle === 'string' && kit.subtitle.trim().length > 0
+        ? kit.subtitle.trim().slice(0, 200)
+        : null;
+    const cleanSymptomTags = Array.isArray(kit.symptomTags)
+      ? kit.symptomTags
+          .filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+          .map((tag) => tag.trim())
+          .slice(0, 25)
+      : null;
 
     return {
       id: kit.id,
+      ...(cleanSkuCode ? { skuCode: cleanSkuCode } : {}),
       name: kit.name,
+      ...(cleanSubtitle ? { subtitle: cleanSubtitle } : {}),
       category: kit.category,
       price: kit.price,
       contents: kit.contents,
+      ...(cleanSymptomTags && cleanSymptomTags.length > 0
+        ? { symptomTags: cleanSymptomTags }
+        : {}),
       reliefFor: kit.reliefFor,
       imagePath: kit.imagePath,
       ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
@@ -411,19 +435,48 @@ export function OperationsView({
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
       .slice(0, 32);
-    const kitId = `kit-${slug || Date.now()}-${String(Date.now()).slice(-4)}`;
+    let kitId = `kit-${slug || Date.now()}-${String(Date.now()).slice(-4)}`;
+    const existingIds = new Set(kits.map((k) => k.id));
+    while (existingIds.has(kitId)) {
+      kitId = `kit-${slug || 'item'}-${Math.floor(1000 + Math.random() * 9000)}`;
+    }
     const sealedCode = (
       newKitCode.trim() || `OTC-${String(kits.length + 1).padStart(2, '0')}`
     )
       .toUpperCase()
       .slice(0, 32);
 
+    const existingSkus = new Set(kits.map((k) => k.skuCode).filter(Boolean));
+    let nextSkuNum = kits.reduce((max, k) => {
+      const m = k.skuCode?.match(/^QCC-(\d+)$/i);
+      return m ? Math.max(max, Number(m[1])) : max;
+    }, kits.length) + 1;
+    let skuCode = `QCC-${String(nextSkuNum).padStart(3, '0')}`.slice(0, 32);
+    while (existingSkus.has(skuCode)) {
+      nextSkuNum += 1;
+      skuCode = `QCC-${String(nextSkuNum).padStart(3, '0')}`.slice(0, 32);
+    }
+    const subtitle = parsedContents.slice(0, 3).join(' · ').slice(0, 200);
+    const symptomTags = Array.from(
+      new Set(
+        [
+          newKitCategory.toLowerCase(),
+          ...trimmedName.toLowerCase().split(/[\s,/&+-]+/),
+          ...newKitRelief.toLowerCase().split(/[\s,/&+-]+/),
+          ...parsedContents.flatMap((c) => c.toLowerCase().split(/[\s,/&+-]+/)),
+        ].filter((t) => t.length >= 3)
+      )
+    ).slice(0, 25);
+
     const newKit: ReliefKit = {
       id: kitId,
+      skuCode,
       name: trimmedName.slice(0, 120),
+      ...(subtitle ? { subtitle } : {}),
       category: newKitCategory,
       price: Math.round(parsedPrice),
       contents: parsedContents,
+      ...(symptomTags.length > 0 ? { symptomTags } : {}),
       reliefFor: newKitRelief.trim().slice(0, 200),
       imagePath: newKitImage,
       ...(newKitPhotoDataUrl ? { photoDataUrl: newKitPhotoDataUrl } : {}),
@@ -473,10 +526,14 @@ export function OperationsView({
   ).length;
   const cancelledOrderCount = orders.filter((o) => o.status === 'cancelled').length;
   const inStockCount = kits.filter((k) => k.inStock).length;
-  const filteredInventoryKits =
+  const categoryScopedInventory =
     inventoryCategory === 'All Kits'
       ? kits
       : kits.filter((k) => k.category === inventoryCategory);
+  const filteredInventoryKits = filterKitsBySearch(
+    categoryScopedInventory,
+    inventorySearch
+  );
 
   return (
     <div className="space-y-5">
@@ -798,7 +855,7 @@ export function OperationsView({
                 OTC Relief Kits Catalog ({filteredInventoryKits.length} of {kits.length})
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Toggle stock availability across all 8 categories in real time or add new emergency wellness kits.
+                Toggle stock availability across all 10 categories in real time or add new emergency wellness kits.
               </p>
             </div>
 
@@ -816,7 +873,24 @@ export function OperationsView({
             </motion.button>
           </div>
 
-          {/* 8-Category Inventory Filter Bar */}
+          {/* Quick-Filter Search Bar for Admin Inventory */}
+          <SymptomSearchBar
+            value={inventorySearch}
+            onChange={(next) => {
+              if (next.trim().length > 0 && inventorySearch.trim().length === 0) {
+                setInventoryCategory('All Kits');
+              }
+              setInventorySearch(next);
+            }}
+            onVoiceActivate={() => setInventoryCategory('All Kits')}
+            showQuickChips={false}
+            placeholder="Quick-filter inventory by kit name, symptom, or SKU (e.g., 'fever', 'ENO', 'QCC-038')..."
+            inputAriaLabel="Filter admin OTC inventory by symptom, name, or code"
+            resultCount={filteredInventoryKits.length}
+            totalCount={kits.length}
+          />
+
+          {/* 10-Category Inventory Filter Bar */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
             {SYMPTOM_FILTERS.map((cat) => {
               const active = inventoryCategory === cat;
@@ -1051,13 +1125,33 @@ export function OperationsView({
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredInventoryKits.map((kit, index) => {
-              const isBusy = updatingKitId === kit.id;
-              const isRegenerating = regeneratingKitId === kit.id;
-              const isUploading = uploadingKitId === kit.id;
-              const isPhotoBusy = isRegenerating || isUploading;
+            {filteredInventoryKits.length === 0 ? (
+              <div className="md:col-span-2 rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                  No OTC kits matched &ldquo;{inventorySearch || inventoryCategory}&rdquo;
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Try searching by symptom, medicine, or OTC code (e.g., fever, ORS, sprain, OTC-FC01).
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInventorySearch('');
+                    setInventoryCategory('All Kits');
+                  }}
+                  className="min-h-[40px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold"
+                >
+                  Reset Inventory Filter
+                </button>
+              </div>
+            ) : (
+              filteredInventoryKits.map((kit, index) => {
+                const isBusy = updatingKitId === kit.id;
+                const isRegenerating = regeneratingKitId === kit.id;
+                const isUploading = uploadingKitId === kit.id;
+                const isPhotoBusy = isRegenerating || isUploading;
 
-              return (
+                return (
                 <motion.article
                   key={kit.id}
                   initial={reduceMotion ? false : { opacity: 0, y: 12 }}
@@ -1072,6 +1166,14 @@ export function OperationsView({
                       </div>
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                          {kit.skuCode && (
+                            <>
+                              <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                                {kit.skuCode}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                            </>
+                          )}
                           <span className="font-semibold text-teal-700 dark:text-teal-400">
                             {kit.category}
                           </span>
@@ -1081,6 +1183,11 @@ export function OperationsView({
                         <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
                           {kit.name}
                         </h3>
+                        {kit.subtitle && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                            {kit.subtitle}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 text-xs">
                           <span className="font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                             ₹{kit.price}
@@ -1161,8 +1268,9 @@ export function OperationsView({
                     </div>
                   </div>
                 </motion.article>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </section>
       )}
