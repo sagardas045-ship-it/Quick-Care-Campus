@@ -11,6 +11,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShoppingBag,
+  Stethoscope,
   X,
 } from 'lucide-react';
 import {
@@ -55,6 +56,7 @@ interface EmergencyOrderViewProps {
   isDarkMode?: boolean;
   lastCompletedOrder?: CampusOrder | null;
   onReorderRecent?: (order: CampusOrder) => void;
+  onOpenConsultDoctor?: () => void;
 }
 
 function getCurfewStatus(): {
@@ -118,6 +120,7 @@ export function EmergencyOrderView({
   isDarkMode = false,
   lastCompletedOrder = null,
   onReorderRecent,
+  onOpenConsultDoctor,
 }: EmergencyOrderViewProps) {
   const [selectedSymptom, setSelectedSymptom] =
     useState<SymptomCategory>('All Kits');
@@ -332,6 +335,36 @@ export function EmergencyOrderView({
           </div>
         </div>
       </motion.section>
+
+      {/* Glowing On-Call MBBS Doctor Teleconsultation Quick-Action Banner */}
+      {onOpenConsultDoctor && (
+        <motion.button
+          type="button"
+          whileTap={shouldReduceMotion ? undefined : { scale: 0.99 }}
+          onClick={onOpenConsultDoctor}
+          className="w-full text-left rounded-2xl bg-gradient-to-r from-teal-600 via-teal-700 to-slate-900 dark:from-teal-600/95 dark:via-teal-800 dark:to-slate-900 border border-teal-400/60 shadow-[0_0_28px_-6px_rgba(20,184,166,0.55)] hover:shadow-[0_0_34px_-4px_rgba(20,184,166,0.7)] px-4 sm:px-5 py-3.5 text-white flex flex-wrap items-center justify-between gap-3 transition-shadow focus-visible:outline-2 focus-visible:outline-teal-300"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+              <Stethoscope className="w-5 h-5 text-teal-100" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs sm:text-sm font-bold leading-snug">
+                🩺 Unsure which medicine to take? Talk to an On-Call MBBS Doctor in 2 mins (₹99)
+              </div>
+              <div className="text-[11px] text-teal-100/90">
+                {profile.wellnessPassActive
+                  ? 'Wellness Pass Active: Instant ₹49 night consult + 1-tap prescription cart'
+                  : '10 PM – 6 AM curfew physicians · Video/Chat triage · 1-tap OTC cart'}
+              </div>
+            </div>
+          </div>
+          <span className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-white text-slate-950 text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 shadow-sm shrink-0">
+            <span>Consult Now</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </span>
+        </motion.button>
+      )}
 
       {/* 10-Category Tactile Selector & One-Click Reorder */}
       <section aria-label="OTC categories and recent reorder" className="space-y-3.5">

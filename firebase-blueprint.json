@@ -209,6 +209,60 @@
         "deliveryMinutes",
         "updatedAt"
       ]
+    },
+    "Consultation": {
+      "title": "Consultation",
+      "description": "24/7 late-night online MBBS doctor teleconsultation session with triage inputs, chat messages, and OTC prescription recommendation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 3, "maxLength": 64 },
+        "studentUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "studentName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "studentPhone": { "type": "string", "pattern": "^\\+91[6-9][0-9]{9}$", "minLength": 13, "maxLength": 13 },
+        "hostelName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "roomNumber": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "doctorId": { "type": "string", "minLength": 2, "maxLength": 64 },
+        "doctorName": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "doctorSpecialty": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "doctorNmcReg": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "symptoms": { "type": "array" },
+        "duration": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "allergies": { "type": "string", "minLength": 0, "maxLength": 200 },
+        "notes": { "type": "string", "minLength": 0, "maxLength": 400 },
+        "consultationFee": { "type": "number" },
+        "wellnessPassApplied": { "type": "boolean" },
+        "upiProvider": { "type": "string", "enum": ["GPay", "PhonePe", "Paytm"] },
+        "status": { "type": "string", "enum": ["active", "prescribed", "completed"] },
+        "messages": { "type": "array" },
+        "recommendedKitIds": { "type": "array" },
+        "prescription": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "studentUid",
+        "studentName",
+        "studentPhone",
+        "hostelName",
+        "roomNumber",
+        "doctorId",
+        "doctorName",
+        "doctorSpecialty",
+        "doctorNmcReg",
+        "symptoms",
+        "duration",
+        "allergies",
+        "notes",
+        "consultationFee",
+        "wellnessPassApplied",
+        "upiProvider",
+        "status",
+        "messages",
+        "recommendedKitIds",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -231,6 +285,10 @@
     "/sharedTrackers/{orderId}": {
       "schema": { "$ref": "#/entities/SharedTracker" },
       "description": "Sanitized live delivery tracking snapshots accessible via shareable deep-links."
+    },
+    "/consultations/{consultationId}": {
+      "schema": { "$ref": "#/entities/Consultation" },
+      "description": "24/7 online doctor teleconsultation sessions, triage notes, real-time chat, and digital OTC prescriptions."
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/RoleRecord" },

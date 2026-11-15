@@ -139,3 +139,69 @@ export interface SharedTracker {
   deliveryMinutes: number;
   updatedAt?: Timestamp;
 }
+
+export type ConsultationStatus = 'active' | 'prescribed' | 'completed';
+
+export interface DoctorProfile {
+  id: string;
+  name: string;
+  qualification: string;
+  specialty: string;
+  nmcReg: string;
+  focusSymptoms: string;
+  languages: string[];
+  responseTimeLabel: string;
+  shiftLabel: string;
+  experienceYears: number;
+  photoUrl: string;
+  baseFee: number;
+  passFee: number;
+  recommendedSymptomMatches: string[];
+}
+
+export interface ConsultationMessage {
+  id: string;
+  sender: 'student' | 'doctor' | 'admin';
+  senderName: string;
+  text: string;
+  timestampIso: string;
+}
+
+export interface DigitalPrescription {
+  diagnosisSummary: string;
+  dosageGuidance: string;
+  firstAidAdvice: string;
+  redFlagWarning: string;
+  allergyCheckNote: string;
+  recommendedKitIds: string[];
+  issuedBy: string;
+  issuedByNmc: string;
+  issuedAtIso: string;
+}
+
+export interface CampusConsultation {
+  id: string;
+  studentUid: string;
+  studentName: string;
+  studentPhone: string;
+  hostelName: string;
+  roomNumber: string;
+  doctorId: string;
+  doctorName: string;
+  doctorSpecialty: string;
+  doctorNmcReg: string;
+  symptoms: string[];
+  duration: string;
+  allergies: string;
+  notes: string;
+  consultationFee: number;
+  wellnessPassApplied: boolean;
+  upiProvider: UpiProvider;
+  status: ConsultationStatus;
+  messages: ConsultationMessage[];
+  recommendedKitIds: string[];
+  prescription?: DigitalPrescription;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+

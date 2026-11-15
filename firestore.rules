@@ -199,6 +199,46 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidConsultation(data, consultationId) {
+      return data.keys().hasAll([
+          'id', 'studentUid', 'studentName', 'studentPhone', 'hostelName', 'roomNumber',
+          'doctorId', 'doctorName', 'doctorSpecialty', 'doctorNmcReg',
+          'symptoms', 'duration', 'allergies', 'notes',
+          'consultationFee', 'wellnessPassApplied', 'upiProvider', 'status',
+          'messages', 'recommendedKitIds', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'studentUid', 'studentName', 'studentPhone', 'hostelName', 'roomNumber',
+          'doctorId', 'doctorName', 'doctorSpecialty', 'doctorNmcReg',
+          'symptoms', 'duration', 'allergies', 'notes',
+          'consultationFee', 'wellnessPassApplied', 'upiProvider', 'status',
+          'messages', 'recommendedKitIds', 'prescription', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id == consultationId && data.id.size() >= 3 && data.id.size() <= 64 &&
+        data.studentUid is string && data.studentUid.size() >= 1 && data.studentUid.size() <= 128 &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 100 &&
+        isValidPhone(data.studentPhone) &&
+        data.hostelName is string && data.hostelName.size() >= 2 && data.hostelName.size() <= 120 &&
+        data.roomNumber is string && data.roomNumber.size() >= 1 && data.roomNumber.size() <= 30 &&
+        data.doctorId is string && data.doctorId.size() >= 2 && data.doctorId.size() <= 64 &&
+        data.doctorName is string && data.doctorName.size() >= 2 && data.doctorName.size() <= 100 &&
+        data.doctorSpecialty is string && data.doctorSpecialty.size() >= 2 && data.doctorSpecialty.size() <= 100 &&
+        data.doctorNmcReg is string && data.doctorNmcReg.size() >= 4 && data.doctorNmcReg.size() <= 40 &&
+        data.symptoms is list && data.symptoms.size() >= 1 && data.symptoms.size() <= 10 && data.symptoms[0] is string &&
+        data.duration is string && data.duration.size() >= 1 && data.duration.size() <= 80 &&
+        data.allergies is string && data.allergies.size() <= 200 &&
+        data.notes is string && data.notes.size() <= 400 &&
+        data.consultationFee is number && data.consultationFee >= 0 && data.consultationFee <= 2000 &&
+        data.wellnessPassApplied is bool &&
+        data.upiProvider in ['GPay', 'PhonePe', 'Paytm'] &&
+        data.status in ['active', 'prescribed', 'completed'] &&
+        data.messages is list && data.messages.size() >= 1 && data.messages.size() <= 50 && data.messages[0] is map &&
+        data.recommendedKitIds is list && data.recommendedKitIds.size() <= 6 && (data.recommendedKitIds.size() == 0 || data.recommendedKitIds[0] is string) &&
+        (!('prescription' in data) || data.prescription is map) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     // Student campus profiles (strictly owner or admin read/write to protect PII)
     match /users/{userId} {
       allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
@@ -307,6 +347,39 @@ service cloud.firestore {
           isRunnerOrAdmin()
         );
       allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // 24/7 On-Call Doctor Teleconsultations (owner student or admin can read/update; fee/ownership immutable)
+    match /consultations/{consultationId} {
+      allow get: if isValidId(consultationId) && isSignedIn() && (
+        existing().studentUid == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.studentUid == request.auth.uid || isAdmin()
+      );
+      allow create: if isVerifiedUser() &&
+        isValidId(consultationId) &&
+        isValidConsultation(incoming(), consultationId) &&
+        incoming().studentUid == request.auth.uid &&
+        incoming().status == 'active' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(consultationId) &&
+        isValidConsultation(incoming(), consultationId) &&
+        incoming().studentUid == existing().studentUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().studentUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'messages', 'status', 'recommendedKitIds', 'prescription', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(consultationId);
     }
 
     // Role registries

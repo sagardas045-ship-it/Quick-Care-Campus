@@ -23,8 +23,10 @@ import {
   Moon,
   PackagePlus,
   Shield,
+  Stethoscope,
   Store,
   Sun,
+  UserCheck,
   UserCog,
 } from 'lucide-react';
 import {
@@ -38,6 +40,7 @@ import { isValidBundledKitImagePath, resolveKitAssetUrl } from './data/kitAssets
 import { writeCachedPhoto } from './utils/photoCache';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import {
+  CampusConsultation,
   CampusOrder,
   CartItem,
   DemoSession,
@@ -52,6 +55,7 @@ import {
 import { LoginScreen } from './components/LoginScreen';
 import { ProfileSetupModal } from './components/ProfileSetupModal';
 import { EmergencyOrderView } from './components/EmergencyOrderView';
+import { ConsultDoctorView } from './components/ConsultDoctorView';
 import { LiveTrackerView } from './components/LiveTrackerView';
 import { OrderHistoryView } from './components/OrderHistoryView';
 import { SharedTrackerView } from './components/SharedTrackerView';
@@ -72,6 +76,7 @@ const GOOGLE_MAPS_API_KEY =
 const CAMPUS_ADMIN_EMAIL = 'sagardas045@gmail.com';
 
 const DEMO_ORDERS_KEY = 'qcc_demo_orders_v1';
+const DEMO_CONSULTATIONS_KEY = 'qcc_demo_consultations_v1';
 const DEMO_KITS_KEY = 'qcc_demo_kits_v1';
 const DEMO_FEEDBACK_KEY = 'qcc_demo_feedback_v1';
 const DEMO_PROFILE_PREFIX = 'qcc_demo_profile_v1_';
@@ -79,7 +84,7 @@ const THEME_STORAGE_KEY = 'qcc_theme_pref_v2';
 const CART_STORAGE_KEY = 'qcc_cart_v1';
 const LEGACY_CART_KEYS = ['cart', 'qcc_cart', 'quickcare_cart', 'qcc_demo_cart_v1'];
 
-type CustomerTab = 'order' | 'tracker' | 'history';
+type CustomerTab = 'order' | 'doctor' | 'tracker' | 'history' | 'profile';
 
 function readStorageJson<T>(key: string, fallback: T): T {
   try {
@@ -477,9 +482,10 @@ export default function App() {
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Orders & Post-delivery Feedback state
+  // Orders, Teleconsultations & Post-delivery Feedback state
   const [orders, setOrders] = useState<CampusOrder[]>([]);
   const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const [consultations, setConsultations] = useState<CampusConsultation[]>([]);
   const [feedbackList, setFeedbackList] = useState<OrderFeedback[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
@@ -762,6 +768,7 @@ export default function App() {
         ordersHydratedRef.current = false;
         prevOrderStatusMapRef.current.clear();
         setOrderToasts([]);
+        setConsultations([]);
         setFeedbackList([]);
         setSelectedOrderId(null);
         setRoleMode('student');
@@ -921,6 +928,41 @@ export default function App() {
     return () => unsubscribe();
   }, [currentUser, profile, roleMode, isCampusAdmin]);
 
+  // Firestore 24/7 Doctor Teleconsultations listener (consultations collection)
+  useEffect(() => {
+    if (!currentUser) return;
+    if (roleMode === 'student' && !profile) return;
+
+    const consultPath = 'consultations';
+    const consultQuery =
+      roleMode === 'admin' && isCampusAdmin
+        ? query(collection(db, 'consultations'))
+        : query(
+            collection(db, 'consultations'),
+            where('studentUid', '==', currentUser.uid)
+          );
+
+    const unsubscribe = onSnapshot(
+      consultQuery,
+      (snapshot) => {
+        const loaded: CampusConsultation[] = snapshot.docs.map(
+          (d) => d.data() as CampusConsultation
+        );
+        loaded.sort((a, b) => {
+          const aMs = a.createdAt?.toMillis?.() ?? 0;
+          const bMs = b.createdAt?.toMillis?.() ?? 0;
+          return bMs - aMs;
+        });
+        setConsultations(loaded);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, consultPath);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser, profile, roleMode, isCampusAdmin]);
+
   // Demo Session Entry Handler
   const handleEnterDemoSession = useCallback((session: DemoSession) => {
     setDemoSession(session);
@@ -937,6 +979,11 @@ export default function App() {
     prevOrderStatusMapRef.current.clear();
     setOrders(savedOrders);
     setOrdersLoaded(true);
+    const savedConsultations = readStorageJson<CampusConsultation[]>(
+      DEMO_CONSULTATIONS_KEY,
+      []
+    );
+    setConsultations(savedConsultations);
     const savedFeedback = readStorageJson<OrderFeedback[]>(DEMO_FEEDBACK_KEY, []);
     setFeedbackList(savedFeedback);
 
@@ -964,6 +1011,7 @@ export default function App() {
     ordersHydratedRef.current = false;
     prevOrderStatusMapRef.current.clear();
     setOrderToasts([]);
+    setConsultations([]);
     setFeedbackList([]);
     setSelectedOrderId(null);
     setRoleMode('student');
@@ -1325,6 +1373,124 @@ export default function App() {
     [handleDemoUpdateOrder, isDemoMode]
   );
 
+  const handleCreateConsultation = useCallback(
+    async (consultation: CampusConsultation): Promise<boolean> => {
+      if (isDemoMode) {
+        setConsultations((prev) => {
+          const next = [consultation, ...prev];
+          writeStorageJson(DEMO_CONSULTATIONS_KEY, next);
+          return next;
+        });
+        return true;
+      }
+
+      const consultPath = `consultations/${consultation.id}`;
+      try {
+        await setDoc(doc(db, 'consultations', consultation.id), {
+          ...consultation,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        return true;
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, consultPath);
+        return false;
+      }
+    },
+    [isDemoMode]
+  );
+
+  const handleUpdateConsultation = useCallback(
+    async (
+      consultationId: string,
+      patch: Partial<CampusConsultation>
+    ): Promise<void> => {
+      if (isDemoMode) {
+        setConsultations((prev) => {
+          const next = prev.map((c) =>
+            c.id === consultationId ? { ...c, ...patch } : c
+          );
+          writeStorageJson(DEMO_CONSULTATIONS_KEY, next);
+          return next;
+        });
+        return;
+      }
+
+      const consultPath = `consultations/${consultationId}`;
+      try {
+        await updateDoc(doc(db, 'consultations', consultationId), {
+          ...patch,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, consultPath);
+      }
+    },
+    [isDemoMode]
+  );
+
+  const handleAddRecommendedKitsToCart = useCallback(
+    (kitIds: string[]): { addedCount: number; addedNames: string[] } => {
+      if (!Array.isArray(kitIds) || kitIds.length === 0) {
+        return { addedCount: 0, addedNames: [] };
+      }
+
+      const kitsById = new globalThis.Map<string, ReliefKit>();
+      kits.forEach((kit) => {
+        if (typeof kit.id === 'string' && kit.id.trim().length > 0) {
+          kitsById.set(kit.id.trim(), kit);
+        }
+      });
+
+      const matchedKits: ReliefKit[] = [];
+      const seen = new Set<string>();
+      for (const rawId of kitIds) {
+        if (typeof rawId !== 'string') continue;
+        const cleanId = rawId.trim();
+        if (!cleanId || seen.has(cleanId)) continue;
+        const found = kitsById.get(cleanId);
+        if (found && found.inStock) {
+          seen.add(cleanId);
+          matchedKits.push(found);
+        }
+      }
+
+      if (matchedKits.length === 0) {
+        return { addedCount: 0, addedNames: [] };
+      }
+
+      setFormError(null);
+      setCart((prev) => {
+        const next = [...prev];
+        matchedKits.forEach((kit) => {
+          const idx = next.findIndex((item) => item.id === kit.id);
+          if (idx >= 0) {
+            next[idx] = {
+              id: kit.id,
+              kit,
+              quantity: next[idx].quantity + 1,
+            };
+          } else {
+            next.push({ id: kit.id, kit, quantity: 1 });
+          }
+        });
+        return next;
+      });
+
+      pushSystemToast(
+        'Doctor Rx Added',
+        'Recommended OTC Items Added to Cart',
+        `${matchedKits.map((k) => k.name).join(', ')} ready for express gate delivery.`
+      );
+
+      return {
+        addedCount: matchedKits.length,
+        addedNames: matchedKits.map((k) => k.name),
+      };
+    },
+    [kits, pushSystemToast]
+  );
+
   const quotaBanner = quotaExceeded ? (
     <div className="bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
       <span>
@@ -1473,10 +1639,12 @@ export default function App() {
               orders={orders}
               kits={kits}
               feedbackList={feedbackList}
+              consultations={consultations}
               isCampusAdmin={isCampusAdmin}
               isDemoMode={isDemoMode}
               isDarkMode={isDarkMode}
               onDemoUpdateOrder={handleDemoUpdateOrder}
+              onUpdateConsultation={handleUpdateConsultation}
               onLocalKitUpdate={handleLocalKitUpdate}
               onLocalKitAdd={handleLocalKitAdd}
             />
@@ -1512,6 +1680,9 @@ export default function App() {
       (o) => o.status !== 'delivered' && o.status !== 'cancelled'
     ).length;
     const completedCount = orders.filter((o) => o.status === 'delivered').length;
+    const openConsultCount = consultations.filter(
+      (c) => c.status !== 'completed'
+    ).length;
 
     return (
       <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -1681,6 +1852,25 @@ export default function App() {
               onReorderRecent={(order) =>
                 handleReorderKits(order, { stayOnStorefront: true })
               }
+              onOpenConsultDoctor={() => {
+                setActiveTab('doctor');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
+
+          {activeTab === 'doctor' && (
+            <ConsultDoctorView
+              profile={profile}
+              kits={kits}
+              consultations={consultations}
+              onCreateConsultation={handleCreateConsultation}
+              onUpdateConsultation={handleUpdateConsultation}
+              onAddRecommendedToCart={handleAddRecommendedKitsToCart}
+              onGoToStorefrontCheckout={() => {
+                setActiveTab('order');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             />
           )}
 
@@ -1722,20 +1912,110 @@ export default function App() {
               onCancelOrder={handleCancelOrder}
             />
           )}
+
+          {activeTab === 'profile' && (
+            <section
+              aria-label="Student campus profile and wellness settings"
+              className="max-w-2xl mx-auto rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-sm space-y-5"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center font-bold text-base shrink-0">
+                    {profile.displayName.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-bold text-slate-900 dark:text-white">
+                      {profile.displayName}
+                    </h1>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                      {profile.phone} · {profile.email || 'Campus Member'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingProfile(true)}
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <UserCog className="w-4 h-4" />
+                  <span>Edit Hostel &amp; Gate Pin</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3.5 space-y-1">
+                  <div className="text-slate-500 dark:text-slate-400">Hostel &amp; Room</div>
+                  <div className="text-sm font-bold text-slate-900 dark:text-white">
+                    {profile.hostelName} · Room {profile.roomNumber}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3.5 space-y-1">
+                  <div className="text-slate-500 dark:text-slate-400">Semester Wellness Pass</div>
+                  <div
+                    className={`text-sm font-bold ${
+                      profile.wellnessPassActive
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {profile.wellnessPassActive
+                      ? 'Active (₹0 Gate Delivery · ₹49 Doctor Consults)'
+                      : 'Inactive (₹60 Gate Delivery · ₹99 Consults)'}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3.5 space-y-1">
+                  <div className="text-slate-500 dark:text-slate-400">Handover Gate Pin GPS</div>
+                  <div className="text-sm font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+                    {profile.gateLat.toFixed(5)}, {profile.gateLng.toFixed(5)}
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3.5 space-y-1">
+                  <div className="text-slate-500 dark:text-slate-400">Emergency Contact</div>
+                  <div className="text-sm font-bold text-slate-900 dark:text-white">
+                    {profile.emergencyContactName}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleRequestBrowserNotifications()}
+                  className="min-h-[42px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-teal-500 flex items-center gap-1.5"
+                >
+                  <Bell className="w-4 h-4 text-teal-600" />
+                  <span>
+                    {browserNotifStatus === 'granted'
+                      ? 'Push Alerts Enabled'
+                      : 'Enable Push Notifications'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSignOut()}
+                  className="min-h-[42px] px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-1.5"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </section>
+          )}
         </main>
 
-        {/* Fixed Frosted Glassmorphism 3-Tab Student Bottom Navigation Bar with Sliding Active Pill */}
+        {/* Fixed Frosted Glassmorphism 5-Tab Student Bottom Navigation Bar with Sliding Active Pill */}
         <nav
           aria-label="Customer storefront navigation"
           className="fixed bottom-0 left-0 right-0 z-40 bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 shadow-[0_-8px_24px_-12px_rgba(15,23,42,0.14)] dark:shadow-[0_-12px_32px_-12px_rgba(0,0,0,0.65)]"
         >
           <LayoutGroup id="student-bottom-nav">
-            <div className="max-w-5xl mx-auto grid grid-cols-3 h-16 px-2 sm:px-3 py-1.5 gap-1.5 sm:gap-2">
+            <div className="max-w-5xl mx-auto grid grid-cols-5 h-16 px-1 sm:px-3 py-1.5 gap-1 sm:gap-2">
               <button
                 type="button"
                 onClick={() => setActiveTab('order')}
                 aria-current={activeTab === 'order' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 sm:px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
                   activeTab === 'order'
                     ? 'text-teal-700 dark:text-teal-300'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1752,17 +2032,53 @@ export default function App() {
                     className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
                   />
                 )}
-                <PackagePlus className="relative z-10 w-5 h-5" />
-                <span className="relative z-10 text-[11px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
+                <PackagePlus className="relative z-10 w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
                   Storefront
                 </span>
               </button>
 
               <button
                 type="button"
+                onClick={() => setActiveTab('doctor')}
+                aria-label="Consult Doctor"
+                aria-current={activeTab === 'doctor' ? 'page' : undefined}
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                  activeTab === 'doctor'
+                    ? 'text-teal-700 dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {activeTab === 'doctor' && (
+                  <motion.span
+                    layoutId="student-nav-pill"
+                    transition={
+                      reduceMotion
+                        ? { duration: 0 }
+                        : { type: 'spring', stiffness: 420, damping: 34 }
+                    }
+                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                  />
+                )}
+                <div className="relative z-10">
+                  <Stethoscope className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {openConsultCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] rounded-full bg-teal-600 text-white text-[9px] font-mono font-bold flex items-center justify-center px-1 tabular-nums">
+                      {openConsultCount}
+                    </span>
+                  )}
+                </div>
+                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Consult Dr
+                </span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setActiveTab('tracker')}
+                aria-label="Live Tracker"
                 aria-current={activeTab === 'tracker' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 sm:px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
                   activeTab === 'tracker'
                     ? 'text-teal-700 dark:text-teal-300'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1780,28 +2096,29 @@ export default function App() {
                   />
                 )}
                 <div className="relative z-10">
-                  <MapPin className="w-5 h-5" />
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5" />
                   {activeCount > 0 && (
                     <motion.span
                       key={activeCount}
                       initial={reduceMotion ? false : { scale: 1.4 }}
                       animate={reduceMotion ? undefined : { scale: 1 }}
-                      className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] rounded-full bg-teal-600 text-white text-[10px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
+                      className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] rounded-full bg-teal-600 text-white text-[9px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
                     >
                       {activeCount}
                     </motion.span>
                   )}
                 </div>
-                <span className="relative z-10 text-[11px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Live Tracker
+                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Tracker
                 </span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('history')}
+                aria-label="Order History"
                 aria-current={activeTab === 'history' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 sm:px-2 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
                   activeTab === 'history'
                     ? 'text-teal-700 dark:text-teal-300'
                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1819,20 +2136,48 @@ export default function App() {
                   />
                 )}
                 <div className="relative z-10">
-                  <History className="w-5 h-5" />
+                  <History className="w-4 h-4 sm:w-5 sm:h-5" />
                   {completedCount > 0 && (
                     <motion.span
                       key={completedCount}
                       initial={reduceMotion ? false : { scale: 1.3 }}
                       animate={reduceMotion ? undefined : { scale: 1 }}
-                      className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] rounded-full bg-emerald-600 text-white text-[10px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
+                      className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] rounded-full bg-emerald-600 text-white text-[9px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
                     >
                       {completedCount}
                     </motion.span>
                   )}
                 </div>
-                <span className="relative z-10 text-[11px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Order History
+                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Orders
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('profile')}
+                aria-label="Student Profile"
+                aria-current={activeTab === 'profile' ? 'page' : undefined}
+                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                  activeTab === 'profile'
+                    ? 'text-teal-700 dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {activeTab === 'profile' && (
+                  <motion.span
+                    layoutId="student-nav-pill"
+                    transition={
+                      reduceMotion
+                        ? { duration: 0 }
+                        : { type: 'spring', stiffness: 420, damping: 34 }
+                    }
+                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                  />
+                )}
+                <UserCheck className="relative z-10 w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
+                  Profile
                 </span>
               </button>
             </div>

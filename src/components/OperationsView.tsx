@@ -20,8 +20,10 @@ import {
   PackageCheck,
   Plus,
   RefreshCw,
+  Send,
   ShieldAlert,
   Star,
+  Stethoscope,
   TrendingUp,
   Truck,
   Upload,
@@ -40,7 +42,15 @@ import {
 } from '../data/campusData';
 import { CATEGORY_FALLBACK_ASSETS } from '../data/kitAssets';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { CampusOrder, OrderFeedback, ReliefKit, SymptomCategory } from '../types';
+import type {
+  CampusConsultation,
+  CampusOrder,
+  ConsultationMessage,
+  DigitalPrescription,
+  OrderFeedback,
+  ReliefKit,
+  SymptomCategory,
+} from '../types';
 import { ProductPhoto } from './ProductPhoto';
 import { SymptomSearchBar } from './SymptomSearchBar';
 import {
@@ -55,15 +65,20 @@ interface OperationsViewProps {
   orders: CampusOrder[];
   kits: ReliefKit[];
   feedbackList: OrderFeedback[];
+  consultations?: CampusConsultation[];
   isCampusAdmin: boolean;
   isDemoMode?: boolean;
   isDarkMode?: boolean;
   onDemoUpdateOrder?: (orderId: string, patch: Partial<CampusOrder>) => void;
+  onUpdateConsultation?: (
+    consultationId: string,
+    patch: Partial<CampusConsultation>
+  ) => Promise<void>;
   onLocalKitUpdate?: (updatedKit: ReliefKit) => void;
   onLocalKitAdd?: (newKit: ReliefKit) => void;
 }
 
-type AdminSectionTab = 'dispatch' | 'inventory' | 'economics';
+type AdminSectionTab = 'dispatch' | 'consultations' | 'inventory' | 'economics';
 type KitCategory = Exclude<SymptomCategory, 'All Kits'>;
 
 const KIT_CATEGORIES: KitCategory[] = [
@@ -92,15 +107,22 @@ export function OperationsView({
   orders,
   kits,
   feedbackList,
+  consultations = [],
   isCampusAdmin,
   isDemoMode = false,
   isDarkMode = false,
   onDemoUpdateOrder,
+  onUpdateConsultation,
   onLocalKitUpdate,
   onLocalKitAdd,
 }: OperationsViewProps) {
   const reduceMotion = useReducedMotion();
   const [sectionTab, setSectionTab] = useState<AdminSectionTab>('dispatch');
+
+  // Consultations Doctor/Admin queue state
+  const [consultReplyDrafts, setConsultReplyDrafts] = useState<Record<string, string>>({});
+  const [pushKitChoice, setPushKitChoice] = useState<Record<string, string>>({});
+  const [busyConsultId, setBusyConsultId] = useState<string | null>(null);
 
   // Dispatch queue modals & state
   const [pinModalOrder, setPinModalOrder] = useState<CampusOrder | null>(null);
@@ -524,6 +546,11 @@ export function OperationsView({
   const activeOrderCount = orders.filter(
     (o) => o.status !== 'delivered' && o.status !== 'cancelled'
   ).length;
+  const activeConsultCount = consultations.filter((c) => c.status !== 'completed').length;
+  const consultRevenue = consultations.reduce(
+    (sum, c) => sum + (Number.isFinite(c.consultationFee) ? c.consultationFee : 0),
+    0
+  );
   const cancelledOrderCount = orders.filter((o) => o.status === 'cancelled').length;
   const inStockCount = kits.filter((k) => k.inStock).length;
   const categoryScopedInventory =
@@ -535,6 +562,95 @@ export function OperationsView({
     inventorySearch
   );
 
+  const handleAdminConsultReply = async (consult: CampusConsultation) => {
+    if (!onUpdateConsultation) return;
+    const text = (consultReplyDrafts[consult.id] || '').trim();
+    if (!text) return;
+
+    setBusyConsultId(consult.id);
+    const adminMsg: ConsultationMessage = {
+      id: `msg-${Date.now()}-adm`,
+      sender: 'admin',
+      senderName: `${consult.doctorName} · On-Duty Desk`,
+      text: text.slice(0, 500),
+      timestampIso: new Date().toISOString(),
+    };
+    const nextMessages = [...consult.messages, adminMsg].slice(-50);
+    setConsultReplyDrafts((prev) => ({ ...prev, [consult.id]: '' }));
+    try {
+      await onUpdateConsultation(consult.id, {
+        messages: nextMessages,
+      });
+    } finally {
+      setBusyConsultId(null);
+    }
+  };
+
+  const handlePushRecommendedKit = async (consult: CampusConsultation) => {
+    if (!onUpdateConsultation) return;
+    const defaultInStock = kits.find((k) => k.inStock)?.id || kits[0]?.id || '';
+    const chosenKitId = pushKitChoice[consult.id] || defaultInStock;
+    const matchedKit = kits.find((k) => k.id === chosenKitId);
+    if (!matchedKit) return;
+
+    setBusyConsultId(consult.id);
+    const nextRecs = Array.from(
+      new Set([...(consult.recommendedKitIds || []), matchedKit.id])
+    ).slice(0, 6);
+
+    const existingRx = consult.prescription;
+    const updatedRx: DigitalPrescription = {
+      diagnosisSummary:
+        existingRx?.diagnosisSummary ||
+        `Physician triage for ${consult.symptoms.join(', ')} (${consult.duration})`,
+      dosageGuidance:
+        existingRx?.dosageGuidance ||
+        `Added ${matchedKit.name} (${matchedKit.reliefFor}). Follow enclosed OTC strip dosage instructions safely.`,
+      firstAidAdvice:
+        existingRx?.firstAidAdvice ||
+        'Rest in your hostel room, stay hydrated, and follow the enclosed kit guide.',
+      redFlagWarning:
+        existingRx?.redFlagWarning ||
+        'Seek immediate campus infirmary care if symptoms worsen sharply, high fever >103°F persists, or breathing difficulty develops.',
+      allergyCheckNote:
+        existingRx?.allergyCheckNote ||
+        `Reviewed against declared allergies (${consult.allergies || 'None known'}).`,
+      recommendedKitIds: nextRecs,
+      issuedBy: consult.doctorName,
+      issuedByNmc: consult.doctorNmcReg,
+      issuedAtIso: new Date().toISOString(),
+    };
+
+    const pushNoticeMsg: ConsultationMessage = {
+      id: `msg-${Date.now()}-rx`,
+      sender: 'admin',
+      senderName: `${consult.doctorName} · Rx Desk`,
+      text: `Added "${matchedKit.name}" (₹${matchedKit.price}) to your Digital Prescription Card. Tap "+ Add Recommended Items to Cart" below to order immediately.`,
+      timestampIso: new Date().toISOString(),
+    };
+
+    try {
+      await onUpdateConsultation(consult.id, {
+        status: consult.status === 'completed' ? 'completed' : 'prescribed',
+        recommendedKitIds: nextRecs,
+        prescription: updatedRx,
+        messages: [...consult.messages, pushNoticeMsg].slice(-50),
+      });
+    } finally {
+      setBusyConsultId(null);
+    }
+  };
+
+  const handleCompleteConsultation = async (consult: CampusConsultation) => {
+    if (!onUpdateConsultation) return;
+    setBusyConsultId(consult.id);
+    try {
+      await onUpdateConsultation(consult.id, { status: 'completed' });
+    } finally {
+      setBusyConsultId(null);
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Control Center Header */}
@@ -545,8 +661,8 @@ export function OperationsView({
             <span aria-hidden="true">·</span>
             <span className="font-medium text-teal-700 dark:text-teal-400">
               {isCampusAdmin
-                ? 'Authorized Campus Admin (All Campus Orders & Live Inventory)'
-                : 'Demo Ops Preview (Your Session Orders)'}
+                ? 'Authorized Campus Admin (All Campus Orders, Consults & Live Inventory)'
+                : 'Demo Ops Preview (Your Session Orders & Consults)'}
             </span>
           </div>
           <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mt-0.5">
@@ -555,11 +671,11 @@ export function OperationsView({
         </div>
 
         {/* Section Tabs */}
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 w-full sm:w-auto">
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 w-full sm:w-auto overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setSectionTab('dispatch')}
-            className={`flex-1 sm:flex-initial min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors ${
+            className={`flex-1 sm:flex-initial min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 transition-colors ${
               sectionTab === 'dispatch'
                 ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -571,8 +687,21 @@ export function OperationsView({
 
           <button
             type="button"
+            onClick={() => setSectionTab('consultations')}
+            className={`flex-1 sm:flex-initial min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 transition-colors ${
+              sectionTab === 'consultations'
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Stethoscope className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+            <span>Consultations ({activeConsultCount})</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setSectionTab('inventory')}
-            className={`flex-1 sm:flex-initial min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors ${
+            className={`flex-1 sm:flex-initial min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 transition-colors ${
               sectionTab === 'inventory'
                 ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -585,7 +714,7 @@ export function OperationsView({
           <button
             type="button"
             onClick={() => setSectionTab('economics')}
-            className={`flex-1 sm:flex-initial min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors ${
+            className={`flex-1 sm:flex-initial min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 transition-colors ${
               sectionTab === 'economics'
                 ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -834,6 +963,254 @@ export function OperationsView({
                           <span className="min-h-[44px] px-3 flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
                             <XCircle className="w-4 h-4" />
                             Cancelled
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* TAB 1B: 24/7 DOCTOR TELECONSULTATION DESK */}
+      {sectionTab === 'consultations' && (
+        <section className="space-y-4" aria-label="Teleconsultation queue and doctor desk">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                Active Consult Requests
+              </div>
+              <div className="text-2xl font-mono font-bold text-slate-900 dark:text-white tabular-nums mt-1">
+                {activeConsultCount}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                Total Teleconsultations
+              </div>
+              <div className="text-2xl font-mono font-bold text-slate-900 dark:text-white tabular-nums mt-1">
+                {consultations.length}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                Consultation Revenue (₹99 / ₹49)
+              </div>
+              <div className="text-2xl font-mono font-bold text-teal-700 dark:text-teal-400 tabular-nums mt-1">
+                ₹{consultRevenue.toLocaleString('en-IN')}
+              </div>
+            </div>
+          </div>
+
+          {consultations.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/70 p-8 text-center space-y-2">
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                No student doctor consultations logged yet
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                When students open the Consult Doctor tab and submit a triage form, their active chat, reported allergies, and consultation fee appear here for live physician reply and OTC kit push.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {consultations.map((consult) => {
+                const isBusy = busyConsultId === consult.id;
+                const defaultKitId =
+                  pushKitChoice[consult.id] ||
+                  kits.find((k) => k.inStock)?.id ||
+                  kits[0]?.id ||
+                  '';
+
+                return (
+                  <article
+                    key={consult.id}
+                    className={`rounded-2xl border p-4 sm:p-5 space-y-4 ${
+                      consult.status === 'completed'
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                    }`}
+                  >
+                    {/* Header Row */}
+                    <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-mono font-bold text-slate-900 dark:text-white">
+                            #{consult.id}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span
+                            className={`font-semibold ${
+                              consult.status === 'completed'
+                                ? 'text-slate-500 dark:text-slate-400'
+                                : consult.status === 'prescribed'
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : 'text-amber-700 dark:text-amber-400'
+                            }`}
+                          >
+                            {consult.status === 'completed'
+                              ? 'Completed'
+                              : consult.status === 'prescribed'
+                              ? 'Rx Issued · Open'
+                              : 'Active Request'}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span className="font-mono text-slate-500 dark:text-slate-400">
+                            {consult.studentPhone}
+                          </span>
+                        </div>
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                          {consult.studentName} · {consult.hostelName} (Room {consult.roomNumber})
+                        </h3>
+                        <p className="text-xs text-teal-700 dark:text-teal-400 font-medium">
+                          Assigned: {consult.doctorName} ({consult.doctorNmcReg})
+                        </p>
+                      </div>
+
+                      <div className="text-right space-y-1">
+                        <div className="text-sm font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+                          ₹{consult.consultationFee}{' '}
+                          <span className="text-[11px] font-normal text-slate-500">
+                            ({consult.upiProvider})
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {consult.wellnessPassApplied ? 'Wellness Pass Rate' : 'Standard Rate'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Clinical Intake Details */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <div className="rounded-xl bg-slate-50 dark:bg-slate-800/70 p-3 space-y-1">
+                        <div className="font-bold text-slate-700 dark:text-slate-200">
+                          Reported Symptoms ({consult.duration})
+                        </div>
+                        <div className="text-slate-900 dark:text-white font-medium">
+                          {consult.symptoms.join(', ')}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-amber-50/70 dark:bg-amber-950/35 border border-amber-200/70 dark:border-amber-800/50 p-3 space-y-1">
+                        <div className="font-bold text-amber-900 dark:text-amber-200">
+                          Declared Drug Allergies
+                        </div>
+                        <div className="text-amber-950 dark:text-amber-100 font-medium">
+                          {consult.allergies || 'None known'}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-slate-50 dark:bg-slate-800/70 p-3 space-y-1">
+                        <div className="font-bold text-slate-700 dark:text-slate-200">
+                          Student Notes &amp; Pushed Kits
+                        </div>
+                        <div className="text-slate-700 dark:text-slate-300">
+                          {consult.notes || 'No extra notes'}
+                        </div>
+                        {consult.recommendedKitIds.length > 0 && (
+                          <div className="text-[11px] font-mono text-teal-700 dark:text-teal-400 pt-1">
+                            Recommended:{' '}
+                            {consult.recommendedKitIds
+                              .map((id) => kits.find((k) => k.id === id)?.name || id)
+                              .join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Recent Messages Preview */}
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/40 p-3 space-y-2 max-h-48 overflow-y-auto">
+                      {consult.messages.slice(-4).map((msg) => (
+                        <div key={msg.id} className="text-xs leading-relaxed">
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {msg.senderName}:{' '}
+                          </span>
+                          <span className="text-slate-700 dark:text-slate-300">{msg.text}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Admin / Doctor Action Bar: Reply, Push Recommended Kit, Complete */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 pt-1">
+                      <div className="lg:col-span-5 flex items-center gap-2">
+                        <input
+                          type="text"
+                          maxLength={500}
+                          disabled={consult.status === 'completed' || isBusy}
+                          value={consultReplyDrafts[consult.id] || ''}
+                          onChange={(e) =>
+                            setConsultReplyDrafts((prev) => ({
+                              ...prev,
+                              [consult.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Reply to student in live chat..."
+                          className="flex-1 min-h-[42px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs text-slate-900 dark:text-white focus:border-teal-600 focus:outline-none disabled:opacity-60"
+                        />
+                        <button
+                          type="button"
+                          disabled={
+                            consult.status === 'completed' ||
+                            isBusy ||
+                            !(consultReplyDrafts[consult.id] || '').trim()
+                          }
+                          onClick={() => void handleAdminConsultReply(consult)}
+                          className="min-h-[42px] px-3.5 rounded-xl bg-slate-900 dark:bg-teal-600 hover:bg-slate-800 dark:hover:bg-teal-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Send Reply</span>
+                        </button>
+                      </div>
+
+                      <div className="lg:col-span-5 flex items-center gap-2">
+                        <select
+                          aria-label={`Select OTC kit to recommend for ${consult.studentName}`}
+                          disabled={isBusy}
+                          value={defaultKitId}
+                          onChange={(e) =>
+                            setPushKitChoice((prev) => ({
+                              ...prev,
+                              [consult.id]: e.target.value,
+                            }))
+                          }
+                          className="flex-1 min-w-0 min-h-[42px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs text-slate-900 dark:text-white focus:border-teal-600 focus:outline-none"
+                        >
+                          {kits
+                            .filter((k) => k.inStock)
+                            .map((kit) => (
+                              <option key={kit.id} value={kit.id}>
+                                {kit.skuCode ? `${kit.skuCode} · ` : ''}
+                                {kit.name} (₹{kit.price})
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => void handlePushRecommendedKit(consult)}
+                          className="min-h-[42px] px-3.5 rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white text-xs font-semibold whitespace-nowrap shrink-0"
+                        >
+                          Push OTC Kit
+                        </button>
+                      </div>
+
+                      <div className="lg:col-span-2 flex justify-end">
+                        {consult.status !== 'completed' ? (
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void handleCompleteConsultation(consult)}
+                            className="w-full min-h-[42px] px-3 rounded-xl border border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Complete</span>
+                          </button>
+                        ) : (
+                          <span className="min-h-[42px] px-3 flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>Closed</span>
                           </span>
                         )}
                       </div>
