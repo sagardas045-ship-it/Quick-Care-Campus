@@ -1,36 +1,55 @@
-import { useState } from 'react';
-import { Cross, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ShieldCheck } from 'lucide-react';
+import { resolveKitImagePath, type KitCategory } from '../data/kitAssets';
+import { CategoryKitIllustration } from './CategoryKitIllustration';
 
 interface KitImageProps {
-  src: string;
+  src?: string | null;
   alt: string;
   code: string;
+  kitId?: string;
+  category?: KitCategory | string;
   showSealBadge?: boolean;
+  compact?: boolean;
+  className?: string;
 }
 
 export function KitImage({
   src,
   alt,
   code,
+  kitId,
+  category,
   showSealBadge = false,
+  compact = false,
+  className = '',
 }: KitImageProps) {
+  const resolvedSrc = resolveKitImagePath(
+    src,
+    kitId,
+    category as KitCategory | undefined
+  );
   const [hasError, setHasError] = useState(false);
 
+  useEffect(() => {
+    setHasError(false);
+  }, [resolvedSrc]);
+
   return (
-    <div className="relative w-full h-full overflow-hidden bg-slate-100 dark:bg-slate-800">
-      {hasError ? (
-        <div className="w-full h-full bg-gradient-to-br from-slate-100 via-teal-50/70 to-slate-100 dark:from-slate-800 dark:via-teal-950/60 dark:to-slate-900 flex flex-col items-center justify-center p-4 text-center">
-          <div className="w-11 h-11 rounded-xl bg-teal-600/10 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 flex items-center justify-center mb-2">
-            <Cross className="w-5 h-5" />
-          </div>
-          <span className="text-xs font-mono font-medium text-slate-600 dark:text-slate-300">
-            {code}
-          </span>
-        </div>
+    <div
+      className={`relative w-full h-full overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/50 dark:to-slate-900 ${className}`}
+    >
+      {hasError || !resolvedSrc ? (
+        <CategoryKitIllustration
+          category={category}
+          code={code}
+          compact={compact}
+        />
       ) : (
         <img
-          src={src}
+          src={resolvedSrc}
           alt={alt}
+          loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => setHasError(true)}
           className="w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"

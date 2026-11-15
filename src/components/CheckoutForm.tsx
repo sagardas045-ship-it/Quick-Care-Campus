@@ -1,13 +1,19 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import {
+  AlertCircle,
   Check,
+  Loader2,
   MapPin,
   MessageCircle,
+  Mic,
+  MicOff,
   Minus,
   Plus,
   ShieldCheck,
+  X,
 } from 'lucide-react';
+import { useSpeechDictation } from '../hooks/useSpeechDictation';
 import {
   DELIVERY_FEE,
   WELLNESS_PASS_PRICE,
@@ -19,6 +25,7 @@ import {
   UpiProvider,
 } from '../types';
 import { HostelPinPickerMap } from './HostelPinPickerMap';
+import { KitImage } from './KitImage';
 
 interface CheckoutFormProps {
   profile: StudentProfile;
@@ -67,6 +74,46 @@ export function CheckoutForm({
 }: CheckoutFormProps) {
   const [showPinAdjuster, setShowPinAdjuster] = useState(false);
   const reduceMotion = useReducedMotion();
+  const roomInputId = useId();
+  const instructionsInputId = useId();
+  const instructionsRef = useRef(specialInstructions);
+  instructionsRef.current = specialInstructions;
+
+  const handleDictatedTranscript = useCallback(
+    (spokenText: string) => {
+      const existing = instructionsRef.current.trimEnd();
+      if (existing.length >= 240) return;
+      const separator = existing.length > 0 && !/[\s\n]$/.test(existing) ? ' ' : '';
+      const updated = `${existing}${separator}${spokenText}`.slice(0, 240);
+      onSpecialInstructionsChange(updated);
+    },
+    [onSpecialInstructionsChange]
+  );
+
+  const {
+    isSupported: isDictationSupported,
+    isRequesting: isMicRequesting,
+    isListening,
+    interimTranscript,
+    error: dictationError,
+    toggleDictation,
+    stopDictation,
+    clearError: clearDictationError,
+  } = useSpeechDictation({
+    onFinalTranscript: handleDictatedTranscript,
+  });
+
+  useEffect(() => {
+    if (submitting && isListening) {
+      stopDictation();
+    }
+  }, [isListening, stopDictation, submitting]);
+
+  useEffect(() => {
+    if (specialInstructions.length >= 240 && isListening) {
+      stopDictation();
+    }
+  }, [isListening, specialInstructions.length, stopDictation]);
 
   const subtotal = cart.reduce((sum, item) => sum + item.kit.price * item.quantity, 0);
   const deliveryFee =
@@ -100,6 +147,16 @@ export function CheckoutForm({
           <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90">
             {cart.map(({ kit, quantity }) => (
               <div key={kit.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="w-16 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
+                  <KitImage
+                    src={kit.imagePath}
+                    alt={kit.name}
+                    code={kit.sealedCode}
+                    kitId={kit.id}
+                    category={kit.category}
+                    compact={true}
+                  />
+                </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                     {kit.name}
@@ -162,13 +219,13 @@ export function CheckoutForm({
 
         <div>
           <label
-            htmlFor="checkout-room"
+            htmlFor={roomInputId}
             className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1"
           >
             Hostel Room / Wing
           </label>
           <input
-            id="checkout-room"
+            id={roomInputId}
             type="text"
             value={roomNumber}
             onChange={(e) => onRoomNumberChange(e.target.value)}
@@ -176,27 +233,115 @@ export function CheckoutForm({
           />
         </div>
 
-        <div>
-          <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
             <label
-              htmlFor="checkout-special-instructions"
+              htmlFor={instructionsInputId}
               className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400"
             >
-              Special Instructions <span className="font-normal text-slate-400 dark:text-slate-500">(Optional)</span>
+              Special Instructions{' '}
+              <span className="font-normal text-slate-400 dark:text-slate-500">
+                (Optional · Type or dictate)
+              </span>
             </label>
             <span className="text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500">
               {specialInstructions.length}/240
             </span>
           </div>
-          <textarea
-            id="checkout-special-instructions"
-            rows={2}
-            maxLength={240}
-            value={specialInstructions}
-            onChange={(e) => onSpecialInstructionsChange(e.target.value.slice(0, 240))}
-            placeholder='e.g., "Leave at security gate" or "Call upon arrival"'
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none resize-none"
-          />
+
+          <div className="relative">
+            <textarea
+              id={instructionsInputId}
+              rows={2}
+              maxLength={240}
+              value={specialInstructions}
+              onChange={(e) => onSpecialInstructionsChange(e.target.value.slice(0, 240))}
+              placeholder='e.g., "Leave at security gate" or tap the mic to speak'
+              className="w-full min-h-[68px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-3 pr-14 py-2 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none resize-none"
+            />
+            <motion.button
+              type="button"
+              whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+              disabled={submitting || specialInstructions.length >= 240}
+              onClick={toggleDictation}
+              aria-pressed={isListening}
+              aria-label={
+                isListening
+                  ? 'Stop voice dictation'
+                  : 'Dictate special delivery instructions using microphone'
+              }
+              title={
+                !isDictationSupported
+                  ? 'Voice dictation is not supported in this browser'
+                  : isListening
+                  ? 'Tap to stop dictating'
+                  : 'Tap to dictate instructions'
+              }
+              className={`absolute right-1.5 bottom-1.5 min-h-[44px] min-w-[44px] rounded-lg border flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isListening
+                  ? 'bg-rose-600 hover:bg-rose-500 border-rose-700 text-white shadow-xs'
+                  : isMicRequesting
+                  ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                  : 'bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300'
+              }`}
+            >
+              {isMicRequesting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isListening ? (
+                <MicOff className="w-4 h-4" />
+              ) : (
+                <Mic className="w-4 h-4" />
+              )}
+            </motion.button>
+          </div>
+
+          {(isMicRequesting || isListening) && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50/80 dark:bg-teal-950/40 px-2.5 py-2 flex items-center justify-between gap-2 text-xs text-teal-900 dark:text-teal-200"
+            >
+              <div className="min-w-0 flex items-center gap-2">
+                <Mic className="w-3.5 h-3.5 text-teal-700 dark:text-teal-300 shrink-0" />
+                <span className="truncate">
+                  {isMicRequesting
+                    ? 'Requesting browser microphone access...'
+                    : interimTranscript
+                    ? `Hearing: "${interimTranscript}"`
+                    : 'Listening — speak your delivery instructions...'}
+                </span>
+              </div>
+              {isListening && (
+                <button
+                  type="button"
+                  onClick={stopDictation}
+                  className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 border border-teal-200 dark:border-teal-700 text-[11px] font-semibold text-teal-800 dark:text-teal-200 hover:bg-teal-100/60 dark:hover:bg-slate-700 whitespace-nowrap shrink-0"
+                >
+                  Stop
+                </button>
+              )}
+            </div>
+          )}
+
+          {dictationError && (
+            <div
+              role="alert"
+              className="rounded-lg border border-rose-200 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-2 flex items-start justify-between gap-2 text-[11px] text-rose-800 dark:text-rose-200"
+            >
+              <div className="flex items-start gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                <span>{dictationError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={clearDictationError}
+                aria-label="Dismiss microphone notice"
+                className="text-rose-600 dark:text-rose-300 hover:text-rose-900 dark:hover:text-white shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {showPinAdjuster && (

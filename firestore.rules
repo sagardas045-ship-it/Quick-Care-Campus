@@ -112,7 +112,7 @@ service cloud.firestore {
         data.upiProvider in ['GPay', 'PhonePe', 'Paytm'] &&
         data.handoverPin is string && data.handoverPin.size() == 4 && data.handoverPin.matches('^[0-9]{4}$') &&
         data.trackerStep is int && data.trackerStep >= 1 && data.trackerStep <= 4 &&
-        data.status in ['queued', 'picked_up', 'gate_cleared', 'arrived', 'delivered'] &&
+        data.status in ['queued', 'picked_up', 'gate_cleared', 'arrived', 'delivered', 'cancelled'] &&
         data.deliveryMinutes is number && data.deliveryMinutes >= 0 && data.deliveryMinutes <= 180 &&
         (!('specialInstructions' in data) || (data.specialInstructions is string && data.specialInstructions.size() <= 240)) &&
         data.createdAt is timestamp &&
@@ -187,7 +187,7 @@ service cloud.firestore {
         isValidCoord(data.runnerLat, data.runnerLng) &&
         data.itemsSummary is list && data.itemsSummary.size() >= 1 && data.itemsSummary.size() <= 10 && data.itemsSummary[0] is string &&
         data.trackerStep is int && data.trackerStep >= 1 && data.trackerStep <= 4 &&
-        data.status in ['queued', 'picked_up', 'gate_cleared', 'arrived', 'delivered'] &&
+        data.status in ['queued', 'picked_up', 'gate_cleared', 'arrived', 'delivered', 'cancelled'] &&
         data.deliveryMinutes is number && data.deliveryMinutes >= 0 && data.deliveryMinutes <= 180 &&
         data.updatedAt is timestamp;
     }
@@ -236,6 +236,7 @@ service cloud.firestore {
         isValidId(orderId) &&
         isValidOrder(incoming()) &&
         existing().status != 'delivered' &&
+        existing().status != 'cancelled' &&
         incoming().studentUid == existing().studentUid &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&

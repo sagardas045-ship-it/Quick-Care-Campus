@@ -1,7 +1,9 @@
 {
   "name": "Quick Care Campus",
   "description": "Late-night emergency OTC medicine and wellness delivery platform for college hostel clusters in Dehradun.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "microphone"
+  ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

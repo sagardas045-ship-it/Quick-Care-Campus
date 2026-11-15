@@ -24,6 +24,7 @@ import {
   TrendingUp,
   Truck,
   X,
+  XCircle,
 } from 'lucide-react';
 import {
   BASELINE_PILOT_COMPLETED,
@@ -72,6 +73,7 @@ const STATUS_LABELS: Record<CampusOrder['status'], { text: string; tone: string 
   gate_cleared: { text: 'Main Gate Cleared', tone: 'text-teal-700 dark:text-teal-400' },
   arrived: { text: 'At Hostel Gate', tone: 'text-slate-900 dark:text-white' },
   delivered: { text: 'Verified & Completed', tone: 'text-slate-500 dark:text-slate-400' },
+  cancelled: { text: 'Cancelled', tone: 'text-rose-700 dark:text-rose-400' },
 };
 
 export function OperationsView({
@@ -120,7 +122,9 @@ export function OperationsView({
     Math.round((totalPilotCompleted / BREAK_EVEN_ORDERS) * 1000) / 10
   );
   const remainingToBreakEven = Math.max(0, BREAK_EVEN_ORDERS - totalPilotCompleted);
-  const sessionRevenue = orders.reduce((sum, o) => sum + o.totalPayable, 0);
+  const sessionRevenue = orders
+    .filter((o) => o.status !== 'cancelled')
+    .reduce((sum, o) => sum + o.totalPayable, 0);
   const pilotContribution = totalPilotCompleted * CONTRIBUTION_MARGIN;
   const avgDeliveryMins =
     deliveredCount > 0
@@ -327,7 +331,10 @@ export function OperationsView({
     }
   };
 
-  const activeOrderCount = orders.filter((o) => o.status !== 'delivered').length;
+  const activeOrderCount = orders.filter(
+    (o) => o.status !== 'delivered' && o.status !== 'cancelled'
+  ).length;
+  const cancelledOrderCount = orders.filter((o) => o.status === 'cancelled').length;
   const inStockCount = kits.filter((k) => k.inStock).length;
   const filteredInventoryKits =
     inventoryCategory === 'All Kits'
@@ -416,6 +423,7 @@ export function OperationsView({
             </h2>
             <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
               {activeOrderCount} active · {deliveredCount} completed
+              {cancelledOrderCount > 0 ? ` · ${cancelledOrderCount} cancelled` : ''}
             </span>
           </div>
 
@@ -438,7 +446,7 @@ export function OperationsView({
                   <article
                     key={order.id}
                     className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-colors ${
-                      order.status === 'delivered'
+                      order.status === 'delivered' || order.status === 'cancelled'
                         ? 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50'
                         : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                     }`}
@@ -589,7 +597,22 @@ export function OperationsView({
                           </motion.button>
                         )}
 
-                        {order.status !== 'delivered' && (
+                        {order.status === 'queued' && (
+                          <motion.button
+                            type="button"
+                            whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+                            disabled={isBusy}
+                            onClick={() =>
+                              void updateOrderStatus(order, 'cancelled', order.trackerStep, 0)
+                            }
+                            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-800/70 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Cancel</span>
+                          </motion.button>
+                        )}
+
+                        {order.status !== 'delivered' && order.status !== 'cancelled' && (
                           <motion.button
                             type="button"
                             whileTap={reduceMotion ? undefined : { scale: 0.95 }}
@@ -610,6 +633,13 @@ export function OperationsView({
                           <span className="min-h-[44px] px-3 flex items-center gap-1.5 text-xs font-semibold text-teal-700 dark:text-teal-400">
                             <CheckCircle2 className="w-4 h-4" />
                             Completed
+                          </span>
+                        )}
+
+                        {order.status === 'cancelled' && (
+                          <span className="min-h-[44px] px-3 flex items-center gap-1.5 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                            <XCircle className="w-4 h-4" />
+                            Cancelled
                           </span>
                         )}
                       </div>
@@ -802,18 +832,29 @@ export function OperationsView({
                   <label htmlFor="kit-image" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                     Kit Photography Asset
                   </label>
-                  <select
-                    id="kit-image"
-                    value={newKitImage}
-                    onChange={(e) => setNewKitImage(e.target.value)}
-                    className="w-full min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 focus:border-teal-600 focus:outline-none"
-                  >
-                    {RELIEF_KITS.map((preset) => (
-                      <option key={preset.id} value={preset.imagePath}>
-                        {preset.name} ({preset.category})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-16 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200 dark:border-slate-700 shrink-0">
+                      <KitImage
+                        src={newKitImage}
+                        alt={newKitName || 'New emergency kit preview'}
+                        code={newKitCode || 'OTC'}
+                        category={newKitCategory}
+                        compact={true}
+                      />
+                    </div>
+                    <select
+                      id="kit-image"
+                      value={newKitImage}
+                      onChange={(e) => setNewKitImage(e.target.value)}
+                      className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 focus:border-teal-600 focus:outline-none"
+                    >
+                      {RELIEF_KITS.map((preset) => (
+                        <option key={preset.id} value={preset.imagePath}>
+                          {preset.name} ({preset.category})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -854,8 +895,15 @@ export function OperationsView({
                   className="group rounded-3xl border border-slate-200 dark:border-slate-800 border-b-[4px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-900 p-4 flex gap-3.5 items-center justify-between shadow-[0_10px_24px_-14px_rgba(15,23,42,0.14)]"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-20 h-[60px] rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 shrink-0">
-                      <KitImage src={kit.imagePath} alt={kit.name} code={kit.sealedCode} />
+                    <div className="w-24 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
+                      <KitImage
+                        src={kit.imagePath}
+                        alt={kit.name}
+                        code={kit.sealedCode}
+                        kitId={kit.id}
+                        category={kit.category}
+                        compact={true}
+                      />
                     </div>
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">

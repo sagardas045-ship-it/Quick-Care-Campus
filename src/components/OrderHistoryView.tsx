@@ -22,9 +22,12 @@ import {
   Star,
   UserCheck,
   X,
+  XCircle,
 } from 'lucide-react';
 import { CampusOrder, OrderFeedback, OrderStatus, ReliefKit } from '../types';
 import { buildSharedTrackerUrl } from '../utils/sharedTracker';
+
+type OrderStatusFilter = 'active' | 'delivered' | 'cancelled';
 
 interface OrderHistoryViewProps {
   orders: CampusOrder[];
@@ -35,6 +38,7 @@ interface OrderHistoryViewProps {
   onGoToOrder: () => void;
   onPublishShareTracker?: (order: CampusOrder) => Promise<void>;
   onPreviewSharedLink?: (orderId: string) => void;
+  onCancelOrder?: (order: CampusOrder) => Promise<void>;
 }
 
 const ACTIVE_STATUS_BADGE: Record<OrderStatus, { label: string; style: string }> = {
@@ -62,6 +66,11 @@ const ACTIVE_STATUS_BADGE: Record<OrderStatus, { label: string; style: string }>
     label: 'Delivered',
     style:
       'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    style:
+      'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800/70 text-rose-700 dark:text-rose-300',
   },
 };
 
@@ -104,9 +113,11 @@ function formatOrderDate(order: CampusOrder): string {
         minute: '2-digit',
       });
     } catch {
+      if (order.status === 'cancelled') return 'Cancelled Order';
       return order.status === 'delivered' ? 'Completed Delivery' : 'Active Delivery';
     }
   }
+  if (order.status === 'cancelled') return 'Cancelled Campus Order';
   return order.status === 'delivered' ? 'Completed Campus Delivery' : 'Live Campus Delivery';
 }
 
@@ -156,21 +167,41 @@ export function OrderHistoryView({
   onGoToOrder,
   onPublishShareTracker,
   onPreviewSharedLink,
+  onCancelOrder,
 }: OrderHistoryViewProps) {
   const reduceMotion = useReducedMotion();
+  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>(() => {
+    if (orders.some((o) => o.status !== 'delivered' && o.status !== 'cancelled')) {
+      return 'active';
+    }
+    if (orders.some((o) => o.status === 'delivered')) {
+      return 'delivered';
+    }
+    if (orders.some((o) => o.status === 'cancelled')) {
+      return 'cancelled';
+    }
+    return 'delivered';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [shareOrder, setShareOrder] = useState<CampusOrder | null>(null);
   const [receiptOrder, setReceiptOrder] = useState<CampusOrder | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [publishingShare, setPublishingShare] = useState(false);
+  const [confirmCancelOrderId, setConfirmCancelOrderId] = useState<string | null>(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
   const activeOrders = useMemo(
-    () => orders.filter((order) => order.status !== 'delivered'),
+    () => orders.filter((order) => order.status !== 'delivered' && order.status !== 'cancelled'),
     [orders]
   );
 
   const completedOrders = useMemo(
     () => orders.filter((order) => order.status === 'delivered'),
+    [orders]
+  );
+
+  const cancelledOrders = useMemo(
+    () => orders.filter((order) => order.status === 'cancelled'),
     [orders]
   );
 
@@ -190,9 +221,15 @@ export function OrderHistoryView({
     return map;
   }, [kits]);
 
-  const filteredCompletedOrders = useMemo(
-    () => completedOrders.filter((order) => matchesOrderSearch(order, searchQuery)),
-    [completedOrders, searchQuery]
+  const currentTabOrders = useMemo(() => {
+    if (statusFilter === 'active') return activeOrders;
+    if (statusFilter === 'cancelled') return cancelledOrders;
+    return completedOrders;
+  }, [activeOrders, cancelledOrders, completedOrders, statusFilter]);
+
+  const filteredOrders = useMemo(
+    () => currentTabOrders.filter((order) => matchesOrderSearch(order, searchQuery)),
+    [currentTabOrders, searchQuery]
   );
 
   const summaryStats = useMemo(() => {
@@ -258,115 +295,219 @@ export function OrderHistoryView({
       )}`
     : '#';
 
+  const handleConfirmCancelOrder = async (order: CampusOrder) => {
+    if (!onCancelOrder) return;
+    setCancellingOrderId(order.id);
+    try {
+      await onCancelOrder(order);
+      setConfirmCancelOrderId(null);
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
+  const filterTabs: {
+    id: OrderStatusFilter;
+    label: string;
+    count: number;
+    Icon: typeof Clock;
+  }[] = [
+    { id: 'active', label: 'Active', count: activeOrders.length, Icon: Clock },
+    { id: 'delivered', label: 'Delivered', count: completedOrders.length, Icon: CheckCircle2 },
+    { id: 'cancelled', label: 'Cancelled', count: cancelledOrders.length, Icon: XCircle },
+  ];
+
+  const activeFilterLabel =
+    statusFilter === 'active'
+      ? 'active'
+      : statusFilter === 'cancelled'
+      ? 'cancelled'
+      : 'delivered';
+
   return (
     <section aria-label="Order history and live tracking shares" className="space-y-5">
-      {/* Active / In-Progress Orders (Share Live Tracking with Roommates) */}
-      {activeOrders.length > 0 && (
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.24 }}
-          className="rounded-3xl bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/70 p-4 sm:p-5 shadow-[0_12px_30px_-18px_rgba(13,148,136,0.2)] space-y-3.5"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400">
-                In-Progress Campus Dispatches
-              </p>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                Active Orders ({activeOrders.length})
-              </h2>
-            </div>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Share live GPS tracking with roommates
-            </span>
+      {/* Header, Status Filter Bar & Search Card */}
+      <motion.div
+        initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-[0_12px_30px_-18px_rgba(15,23,42,0.16)] dark:shadow-[0_14px_34px_-16px_rgba(0,0,0,0.65)] space-y-4"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400">
+              Campus Pharmacy Orders
+            </p>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Order History
+            </h1>
           </div>
 
-          <motion.div
-            variants={ORDER_LIST_VARIANTS}
-            initial={reduceMotion ? false : 'hidden'}
-            animate="visible"
-            className="space-y-3"
-          >
-            {activeOrders.map((order) => {
-              const badge = ACTIVE_STATUS_BADGE[order.status];
-              return (
-                <motion.article
-                  key={order.id}
-                  variants={ORDER_CARD_VARIANTS}
-                  layout="position"
-                  className="rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 px-3 py-2">
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                Delivered
+              </p>
+              <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-white">
+                {summaryStats.count}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 px-3 py-2">
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                Kits Bought
+              </p>
+              <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-white">
+                {summaryStats.totalItems}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200/80 dark:border-teal-800/60 px-3 py-2">
+              <p className="text-[11px] font-medium text-teal-800 dark:text-teal-300">
+                Total Paid
+              </p>
+              <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-teal-700 dark:text-teal-300">
+                ₹{summaryStats.totalPaid}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Active / Delivered / Cancelled Filter Toggle */}
+        <div
+          role="tablist"
+          aria-label="Filter orders by status"
+          className="grid grid-cols-3 gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-950/80 border border-slate-200/80 dark:border-slate-800 p-1.5"
+        >
+          {filterTabs.map(({ id, label, count, Icon }) => {
+            const isSelected = statusFilter === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                onClick={() => {
+                  setStatusFilter(id);
+                  setConfirmCancelOrderId(null);
+                }}
+                className={`min-h-[44px] px-2.5 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                  isSelected
+                    ? id === 'cancelled'
+                      ? 'bg-white dark:bg-slate-800 text-rose-700 dark:text-rose-300 shadow-xs border border-rose-200/70 dark:border-rose-800/50'
+                      : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                <Icon
+                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
+                    isSelected
+                      ? id === 'cancelled'
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : id === 'delivered'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-teal-600 dark:text-teal-400'
+                      : 'text-slate-400 dark:text-slate-500'
+                  }`}
+                />
+                <span>{label}</span>
+                <span
+                  className={`font-mono text-[11px] tabular-nums px-1.5 py-0.5 rounded-md ${
+                    isSelected
+                      ? id === 'cancelled'
+                        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+                        : 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-200'
+                      : 'text-slate-500 dark:text-slate-500'
+                  }`}
                 >
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">
-                        #{order.id}
-                      </span>
-                      <span
-                        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${badge.style}`}
-                      >
-                        {badge.label}
-                      </span>
-                      <span className="text-xs font-mono font-bold text-slate-900 dark:text-teal-300 tabular-nums">
-                        ₹{order.totalPayable}
-                      </span>
-                    </div>
-                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
-                      {order.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {order.hostelName} · Room {order.roomNumber} · Runner: {order.runnerName}
-                    </p>
-                  </div>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <motion.button
-                      type="button"
-                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                      onClick={() => void handleOpenShareModal(order)}
-                      className="min-h-[44px] px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold border-b-[3px] border-teal-800 active:border-b active:translate-y-[1px] inline-flex items-center gap-1.5 transition-all"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>Share Live Link</span>
-                    </motion.button>
+        {/* Search Input */}
+        <div className="space-y-1.5">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${activeFilterLabel} orders by items, date (e.g. Nov 15), or order ID...`}
+              aria-label="Search orders by items, date, or order ID"
+              className="w-full min-h-[44px] pl-10 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-500/20"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {searchQuery.trim().length > 0 && (
+            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 px-1 tabular-nums">
+              Showing {filteredOrders.length} of {currentTabOrders.length} {activeFilterLabel}{' '}
+              {currentTabOrders.length === 1 ? 'order' : 'orders'}
+            </p>
+          )}
+        </div>
+      </motion.div>
 
-                    <motion.button
-                      type="button"
-                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                      onClick={() => onOpenInTracker(order.id)}
-                      className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
-                    >
-                      <MapPin className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                      <span>Live Tracker</span>
-                    </motion.button>
-                  </div>
-                </motion.article>
-              );
-            })}
-          </motion.div>
-        </motion.div>
-      )}
-
-      {/* Completed Orders Empty State */}
-      {completedOrders.length === 0 ? (
+      {/* Empty State for Selected Status Filter */}
+      {currentTabOrders.length === 0 ? (
         <motion.div
+          key={`empty-${statusFilter}`}
           initial={reduceMotion ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
           className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 sm:p-10 text-center shadow-[0_14px_34px_-18px_rgba(15,23,42,0.16)] dark:shadow-[0_16px_38px_-16px_rgba(0,0,0,0.65)] space-y-4"
         >
-          <div className="w-14 h-14 rounded-2xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-800/70 text-teal-700 dark:text-teal-300 flex items-center justify-center mx-auto">
-            <ReceiptText className="w-7 h-7" />
+          <div
+            className={`w-14 h-14 rounded-2xl border flex items-center justify-center mx-auto ${
+              statusFilter === 'cancelled'
+                ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/80 dark:border-rose-800/70 text-rose-700 dark:text-rose-300'
+                : 'bg-teal-50 dark:bg-teal-950/60 border-teal-200/80 dark:border-teal-800/70 text-teal-700 dark:text-teal-300'
+            }`}
+          >
+            {statusFilter === 'cancelled' ? (
+              <XCircle className="w-7 h-7" />
+            ) : statusFilter === 'active' ? (
+              <Clock className="w-7 h-7" />
+            ) : (
+              <ReceiptText className="w-7 h-7" />
+            )}
           </div>
           <div className="space-y-1.5 max-w-md mx-auto">
             <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-              No Completed Orders Yet
+              {statusFilter === 'active'
+                ? 'No Active Dispatches Right Now'
+                : statusFilter === 'cancelled'
+                ? 'No Cancelled Orders'
+                : 'No Delivered Orders Yet'}
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-              Past OTC medicine orders appear here automatically once your hostel gate handover is verified with your 4-digit PIN.
+              {statusFilter === 'active'
+                ? 'Orders currently en route to your hostel gate will appear here with live roommate tracking links.'
+                : statusFilter === 'cancelled'
+                ? 'Any order cancelled before pharmacy pickup appears here so you can review or reorder kits quickly.'
+                : 'Past OTC medicine orders appear here automatically once your hostel gate handover is verified with your 4-digit PIN.'}
             </p>
           </div>
           <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+            {statusFilter !== 'delivered' && completedOrders.length > 0 && (
+              <motion.button
+                type="button"
+                whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                onClick={() => setStatusFilter('delivered')}
+                className="min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-sm font-semibold inline-flex items-center gap-2 transition-all"
+              >
+                <span>View Delivered ({completedOrders.length})</span>
+              </motion.button>
+            )}
             <motion.button
               type="button"
               whileTap={reduceMotion ? undefined : { scale: 0.96 }}
@@ -378,327 +519,480 @@ export function OrderHistoryView({
             </motion.button>
           </div>
         </motion.div>
-      ) : (
-        <>
-          {/* Summary Header & Metrics Strip */}
-          <motion.div
-            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-            className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-[0_12px_30px_-18px_rgba(15,23,42,0.16)] dark:shadow-[0_14px_34px_-16px_rgba(0,0,0,0.65)] space-y-4"
+      ) : filteredOrders.length === 0 ? (
+        <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center space-y-2">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+            No {activeFilterLabel} orders match &ldquo;{searchQuery}&rdquo;
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400">
-                  Verified Gate Handovers
-                </p>
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                  Completed Order History
-                </h1>
-              </div>
+            Reset search filter
+          </button>
+        </div>
+      ) : (
+        <motion.div
+          key={`${statusFilter}-${searchQuery.trim().toLowerCase() || 'all'}`}
+          variants={ORDER_LIST_VARIANTS}
+          initial={reduceMotion ? false : 'hidden'}
+          animate="visible"
+          className="space-y-4"
+        >
+          {filteredOrders.map((order) => {
+            const statusBadge = ACTIVE_STATUS_BADGE[order.status];
+            const feedback = feedbackByOrderId.get(order.id) ?? null;
+            const passFeeAmount = Math.max(
+              0,
+              order.totalPayable - order.subtotal - order.deliveryFee
+            );
+            const totalUnits = order.items.reduce((sum, item) => sum + item.quantity, 0);
+            const inStockMatchCount = order.items.filter((item) => {
+              const catalogKit = kitsById.get(item.kitId);
+              return catalogKit ? catalogKit.inStock : false;
+            }).length;
 
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 px-3 py-2">
-                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    Orders
-                  </p>
-                  <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-white">
-                    {summaryStats.count}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 px-3 py-2">
-                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    Kits Bought
-                  </p>
-                  <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-white">
-                    {summaryStats.totalItems}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200/80 dark:border-teal-800/60 px-3 py-2">
-                  <p className="text-[11px] font-medium text-teal-800 dark:text-teal-300">
-                    Total Paid
-                  </p>
-                  <p className="text-base sm:text-lg font-bold font-mono tabular-nums text-teal-700 dark:text-teal-300">
-                    ₹{summaryStats.totalPaid}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search past orders by items, date (e.g. Nov 13), or order ID..."
-                  aria-label="Search past orders by items, date, or order ID"
-                  className="w-full min-h-[44px] pl-10 pr-10 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/60 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-500/20"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    aria-label="Clear search"
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-800 flex items-center justify-center"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              {searchQuery.trim().length > 0 && (
-                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 px-1 tabular-nums">
-                  Showing {filteredCompletedOrders.length} of {completedOrders.length} completed{' '}
-                  {completedOrders.length === 1 ? 'order' : 'orders'}
-                </p>
-              )}
-            </div>
-          </motion.div>
-
-          {/* No Search Results */}
-          {filteredCompletedOrders.length === 0 ? (
-            <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 text-center space-y-2">
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                No completed orders match &ldquo;{searchQuery}&rdquo;
-              </p>
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline"
-              >
-                Reset search filter
-              </button>
-            </div>
-          ) : (
-            <motion.div
-              key={searchQuery.trim().toLowerCase() || 'all-completed'}
-              variants={ORDER_LIST_VARIANTS}
-              initial={reduceMotion ? false : 'hidden'}
-              animate="visible"
-              className="space-y-4"
-            >
-              {filteredCompletedOrders.map((order) => {
-                const feedback = feedbackByOrderId.get(order.id) ?? null;
-                const passFeeAmount = Math.max(
-                  0,
-                  order.totalPayable - order.subtotal - order.deliveryFee
-                );
-                const totalUnits = order.items.reduce((sum, item) => sum + item.quantity, 0);
-                const inStockMatchCount = order.items.filter((item) => {
-                  const catalogKit = kitsById.get(item.kitId);
-                  return catalogKit ? catalogKit.inStock : false;
-                }).length;
-
-                return (
-                  <motion.article
-                    key={order.id}
-                    variants={ORDER_CARD_VARIANTS}
-                    layout="position"
-                    className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-[0_12px_28px_-18px_rgba(15,23,42,0.16)] dark:shadow-[0_14px_34px_-16px_rgba(0,0,0,0.65)] space-y-4"
-                  >
-                    {/* Order Header: ID, Timestamp, Status & Total Paid */}
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm sm:text-base font-bold font-mono text-slate-900 dark:text-white">
-                            #{order.id}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/70 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>Delivered</span>
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                          <span className="inline-flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>{formatOrderDate(order)}</span>
-                          </span>
-                          <span>·</span>
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                            <span>
-                              {order.hostelName} · Room {order.roomNumber}
-                            </span>
-                          </span>
-                        </div>
+            if (statusFilter === 'active') {
+              const isConfirmingCancel = confirmCancelOrderId === order.id;
+              const isCancelling = cancellingOrderId === order.id;
+              return (
+                <motion.article
+                  key={order.id}
+                  variants={ORDER_CARD_VARIANTS}
+                  layout="position"
+                  className="rounded-3xl bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-800/70 p-4 sm:p-5 shadow-[0_12px_28px_-18px_rgba(13,148,136,0.18)] space-y-3.5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                          #{order.id}
+                        </span>
+                        <span
+                          className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${statusBadge.style}`}
+                        >
+                          {statusBadge.label}
+                        </span>
                       </div>
-
-                      <div className="text-left sm:text-right">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                          Total Paid
-                        </p>
-                        <p className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
-                          ₹{order.totalPayable}
-                        </p>
-                        <p className="text-[11px] font-medium text-teal-700 dark:text-teal-400">
-                          Paid via {order.upiProvider}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Items Purchased Summary */}
-                    <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 p-3.5 sm:p-4 space-y-2.5">
-                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-300">
-                        <span className="inline-flex items-center gap-1.5">
-                          <PackageCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{formatOrderDate(order)}</span>
+                        </span>
+                        <span>·</span>
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                           <span>
-                            Items Purchased ({totalUnits} {totalUnits === 1 ? 'unit' : 'units'})
+                            {order.hostelName} · Room {order.roomNumber}
                           </span>
                         </span>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                          <UserCheck className="w-3.5 h-3.5" />
-                          <span>Runner: {order.runnerName}</span>
-                        </span>
                       </div>
+                    </div>
 
-                      <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
-                        {order.items.map((item) => {
-                          const lineTotal = item.price * item.quantity;
-                          return (
-                            <li
-                              key={`${order.id}-${item.kitId}`}
-                              className="py-2 first:pt-1 last:pb-1 flex items-center justify-between gap-3 text-xs sm:text-sm"
+                    <div className="text-left sm:text-right">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Total Payable
+                      </p>
+                      <p className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-teal-300">
+                        ₹{order.totalPayable}
+                      </p>
+                      <p className="text-[11px] font-medium text-teal-700 dark:text-teal-400">
+                        PIN {order.handoverPin} · {order.upiProvider}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      <span>
+                        {totalUnits} {totalUnits === 1 ? 'Kit' : 'Kits'} in Dispatch
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>Runner: {order.runnerName}</span>
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200">
+                      {order.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}
+                    </p>
+                    {order.specialInstructions && (
+                      <p className="text-xs text-slate-600 dark:text-slate-400 pt-1 border-t border-slate-200/70 dark:border-slate-800">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">Note:</span>{' '}
+                        {order.specialInstructions}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <motion.button
+                        type="button"
+                        whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                        onClick={() => void handleOpenShareModal(order)}
+                        className="min-h-[44px] px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold border-b-[3px] border-teal-800 active:border-b active:translate-y-[1px] inline-flex items-center gap-1.5 transition-all"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>Share Live Link</span>
+                      </motion.button>
+
+                      <motion.button
+                        type="button"
+                        whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                        onClick={() => onOpenInTracker(order.id)}
+                        className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        <span>Live Tracker</span>
+                      </motion.button>
+                    </div>
+
+                    {order.status === 'queued' && onCancelOrder && (
+                      <div className="flex items-center gap-2">
+                        {isConfirmingCancel ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isCancelling}
+                              onClick={() => void handleConfirmCancelOrder(order)}
+                              className="min-h-[44px] px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
                             >
-                              <div className="min-w-0 flex-1">
-                                <p className="font-semibold text-slate-900 dark:text-white truncate">
-                                  {item.name}
-                                </p>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                                  Qty {item.quantity} × ₹{item.price}
-                                </p>
-                              </div>
-                              <span className="font-bold font-mono tabular-nums text-slate-900 dark:text-white shrink-0">
-                                ₹{lineTotal}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-
-                      {/* Bill Breakdown Footer */}
-                      <div className="pt-2.5 border-t border-slate-200/80 dark:border-slate-800 space-y-1 text-xs">
-                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                          <span>Items Subtotal</span>
-                          <span className="font-mono tabular-nums">₹{order.subtotal}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                          <span>Curfew Express Fee</span>
-                          <span className="font-mono tabular-nums">
-                            {order.deliveryFee === 0
-                              ? '₹0 (Wellness Pass)'
-                              : `₹${order.deliveryFee}`}
-                          </span>
-                        </div>
-                        {passFeeAmount > 0 && (
-                          <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-                            <span>Semester Wellness Pass</span>
-                            <span className="font-mono tabular-nums">₹{passFeeAmount}</span>
-                          </div>
-                        )}
-                        <div className="pt-1 flex items-center justify-between font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
-                          <span>Total Amount Paid</span>
-                          <span className="font-mono tabular-nums text-teal-700 dark:text-teal-300">
-                            ₹{order.totalPayable}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Rating & Action Row */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
-                      {feedback ? (
-                        <div className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 rounded-xl px-3 py-2">
-                          <div
-                            className="flex items-center gap-0.5 shrink-0 pt-0.5"
-                            aria-label={`Rated ${feedback.rating} out of 5 stars`}
-                          >
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <Star
-                                key={star}
-                                className={`w-3.5 h-3.5 ${
-                                  star <= feedback.rating
-                                    ? 'fill-amber-400 text-amber-500'
-                                    : 'text-slate-300 dark:text-slate-700'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                          <p className="leading-snug">
-                            <span className="font-semibold">Your review:</span>{' '}
-                            {feedback.comment ? (
-                              <span className="italic">&ldquo;{feedback.comment}&rdquo;</span>
-                            ) : (
-                              <span>Rated {feedback.rating}/5</span>
-                            )}
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Delivered in ~{order.deliveryMinutes || 16} mins · Runner rating pending
-                        </p>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        {!feedback && (
-                          <motion.button
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>{isCancelling ? 'Cancelling...' : 'Confirm Cancel'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isCancelling}
+                              onClick={() => setConfirmCancelOrderId(null)}
+                              className="min-h-[44px] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                            >
+                              Keep
+                            </button>
+                          </>
+                        ) : (
+                          <button
                             type="button"
-                            whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                            onClick={() => onOpenInTracker(order.id)}
-                            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700 border-b-[3px] border-b-amber-400 dark:border-b-amber-900 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                            onClick={() => setConfirmCancelOrderId(order.id)}
+                            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-800/70 bg-rose-50/70 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
                           >
-                            <Star className="w-3.5 h-3.5" />
-                            <span>Rate Runner</span>
-                          </motion.button>
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Cancel Order</span>
+                          </button>
                         )}
+                      </div>
+                    )}
+                  </div>
+                </motion.article>
+              );
+            }
 
-                        <motion.button
-                          type="button"
-                          whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                          onClick={() => void handleOpenShareModal(order)}
-                          className="min-h-[44px] px-3.5 py-2 rounded-xl border border-teal-200 dark:border-teal-800 border-b-[3px] border-b-teal-300 dark:border-b-teal-950 bg-teal-50/70 dark:bg-teal-950/40 hover:bg-teal-100/80 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+            if (statusFilter === 'cancelled') {
+              return (
+                <motion.article
+                  key={order.id}
+                  variants={ORDER_CARD_VARIANTS}
+                  layout="position"
+                  className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-[0_12px_28px_-18px_rgba(15,23,42,0.12)] space-y-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm sm:text-base font-bold font-mono text-slate-900 dark:text-white">
+                          #{order.id}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${statusBadge.style}`}
                         >
-                          <Share2 className="w-3.5 h-3.5" />
-                          <span>Share Link</span>
-                        </motion.button>
-
-                        <motion.button
-                          type="button"
-                          whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                          onClick={() => setReceiptOrder(order)}
-                          className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
-                        >
-                          <FileDown className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                          <span>Download Receipt</span>
-                        </motion.button>
-
-                        <motion.button
-                          type="button"
-                          whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                          onClick={() => onOpenInTracker(order.id)}
-                          className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
-                        >
-                          <span>View Details</span>
-                        </motion.button>
-
-                        <motion.button
-                          type="button"
-                          whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                          disabled={inStockMatchCount === 0}
-                          onClick={() => onReorderKits(order)}
-                          className="min-h-[44px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 text-xs font-semibold border-b-[3px] border-teal-800 disabled:border-slate-400 dark:disabled:border-slate-900 active:border-b active:translate-y-[1px] inline-flex items-center gap-1.5 transition-all"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>{inStockMatchCount === 0 ? 'Out of Stock' : 'Reorder Kits'}</span>
-                        </motion.button>
+                          <XCircle className="w-3 h-3" />
+                          <span>Cancelled</span>
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{formatOrderDate(order)}</span>
+                        </span>
+                        <span>·</span>
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          <span>
+                            {order.hostelName} · Room {order.roomNumber}
+                          </span>
+                        </span>
                       </div>
                     </div>
-                  </motion.article>
-                );
-              })}
-            </motion.div>
-          )}
-        </>
+
+                    <div className="text-left sm:text-right">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Order Total
+                      </p>
+                      <p className="text-xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-300 line-through decoration-rose-500/60">
+                        ₹{order.totalPayable}
+                      </p>
+                      <p className="text-[11px] font-medium text-rose-700 dark:text-rose-400">
+                        Cancelled before delivery
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-2">
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      Cancelled Items ({totalUnits} {totalUnits === 1 ? 'unit' : 'units'})
+                    </p>
+                    <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                      {order.items.map((item) => (
+                        <li
+                          key={`${order.id}-${item.kitId}`}
+                          className="py-1.5 first:pt-0.5 last:pb-0.5 flex items-center justify-between gap-3 text-xs sm:text-sm"
+                        >
+                          <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                            {item.name} × {item.quantity}
+                          </span>
+                          <span className="font-mono tabular-nums text-slate-600 dark:text-slate-400 shrink-0">
+                            ₹{item.price * item.quantity}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {order.specialInstructions && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200/70 dark:border-slate-800">
+                        <span className="font-semibold">Note:</span> {order.specialInstructions}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <motion.button
+                      type="button"
+                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                      onClick={() => onOpenInTracker(order.id)}
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <span>View Details</span>
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                      disabled={inStockMatchCount === 0}
+                      onClick={() => onReorderKits(order)}
+                      className="min-h-[44px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 text-xs font-semibold border-b-[3px] border-teal-800 disabled:border-slate-400 dark:disabled:border-slate-900 active:border-b active:translate-y-[1px] inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>{inStockMatchCount === 0 ? 'Out of Stock' : 'Reorder Kits'}</span>
+                    </motion.button>
+                  </div>
+                </motion.article>
+              );
+            }
+
+            return (
+              <motion.article
+                key={order.id}
+                variants={ORDER_CARD_VARIANTS}
+                layout="position"
+                className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-[0_12px_28px_-18px_rgba(15,23,42,0.16)] dark:shadow-[0_14px_34px_-16px_rgba(0,0,0,0.65)] space-y-4"
+              >
+                {/* Order Header: ID, Timestamp, Status & Total Paid */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm sm:text-base font-bold font-mono text-slate-900 dark:text-white">
+                        #{order.id}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/70 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Delivered</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{formatOrderDate(order)}</span>
+                      </span>
+                      <span>·</span>
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        <span>
+                          {order.hostelName} · Room {order.roomNumber}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-left sm:text-right">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Total Paid
+                    </p>
+                    <p className="text-xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
+                      ₹{order.totalPayable}
+                    </p>
+                    <p className="text-[11px] font-medium text-teal-700 dark:text-teal-400">
+                      Paid via {order.upiProvider}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Items Purchased Summary */}
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 p-3.5 sm:p-4 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    <span className="inline-flex items-center gap-1.5">
+                      <PackageCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <span>
+                        Items Purchased ({totalUnits} {totalUnits === 1 ? 'unit' : 'units'})
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Runner: {order.runnerName}</span>
+                    </span>
+                  </div>
+
+                  <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                    {order.items.map((item) => {
+                      const lineTotal = item.price * item.quantity;
+                      return (
+                        <li
+                          key={`${order.id}-${item.kitId}`}
+                          className="py-2 first:pt-1 last:pb-1 flex items-center justify-between gap-3 text-xs sm:text-sm"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-slate-900 dark:text-white truncate">
+                              {item.name}
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                              Qty {item.quantity} × ₹{item.price}
+                            </p>
+                          </div>
+                          <span className="font-bold font-mono tabular-nums text-slate-900 dark:text-white shrink-0">
+                            ₹{lineTotal}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {/* Bill Breakdown Footer */}
+                  <div className="pt-2.5 border-t border-slate-200/80 dark:border-slate-800 space-y-1 text-xs">
+                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                      <span>Items Subtotal</span>
+                      <span className="font-mono tabular-nums">₹{order.subtotal}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                      <span>Curfew Express Fee</span>
+                      <span className="font-mono tabular-nums">
+                        {order.deliveryFee === 0
+                          ? '₹0 (Wellness Pass)'
+                          : `₹${order.deliveryFee}`}
+                      </span>
+                    </div>
+                    {passFeeAmount > 0 && (
+                      <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                        <span>Semester Wellness Pass</span>
+                        <span className="font-mono tabular-nums">₹{passFeeAmount}</span>
+                      </div>
+                    )}
+                    <div className="pt-1 flex items-center justify-between font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
+                      <span>Total Amount Paid</span>
+                      <span className="font-mono tabular-nums text-teal-700 dark:text-teal-300">
+                        ₹{order.totalPayable}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rating & Action Row */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
+                  {feedback ? (
+                    <div className="flex items-start gap-2 text-xs text-slate-700 dark:text-slate-300 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 rounded-xl px-3 py-2">
+                      <div
+                        className="flex items-center gap-0.5 shrink-0 pt-0.5"
+                        aria-label={`Rated ${feedback.rating} out of 5 stars`}
+                      >
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            className={`w-3.5 h-3.5 ${
+                              star <= feedback.rating
+                                ? 'fill-amber-400 text-amber-500'
+                                : 'text-slate-300 dark:text-slate-700'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <p className="leading-snug">
+                        <span className="font-semibold">Your review:</span>{' '}
+                        {feedback.comment ? (
+                          <span className="italic">&ldquo;{feedback.comment}&rdquo;</span>
+                        ) : (
+                          <span>Rated {feedback.rating}/5</span>
+                        )}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Delivered in ~{order.deliveryMinutes || 16} mins · Runner rating pending
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {!feedback && (
+                      <motion.button
+                        type="button"
+                        whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                        onClick={() => onOpenInTracker(order.id)}
+                        className="min-h-[44px] px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700 border-b-[3px] border-b-amber-400 dark:border-b-amber-900 bg-amber-50 dark:bg-amber-950/50 hover:bg-amber-100 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                        <span>Rate Runner</span>
+                      </motion.button>
+                    )}
+
+                    <motion.button
+                      type="button"
+                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                      onClick={() => void handleOpenShareModal(order)}
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl border border-teal-200 dark:border-teal-800 border-b-[3px] border-b-teal-300 dark:border-b-teal-950 bg-teal-50/70 dark:bg-teal-950/40 hover:bg-teal-100/80 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Share Link</span>
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                      onClick={() => setReceiptOrder(order)}
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <FileDown className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>Download Receipt</span>
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                      onClick={() => onOpenInTracker(order.id)}
+                      className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <span>View Details</span>
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                      disabled={inStockMatchCount === 0}
+                      onClick={() => onReorderKits(order)}
+                      className="min-h-[44px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 text-xs font-semibold border-b-[3px] border-teal-800 disabled:border-slate-400 dark:disabled:border-slate-900 active:border-b active:translate-y-[1px] inline-flex items-center gap-1.5 transition-all"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>{inStockMatchCount === 0 ? 'Out of Stock' : 'Reorder Kits'}</span>
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.article>
+            );
+          })}
+        </motion.div>
       )}
 
       {/* Shareable Roommate Deep-Link Modal */}

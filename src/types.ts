@@ -53,7 +53,8 @@ export type OrderStatus =
   | 'picked_up'
   | 'gate_cleared'
   | 'arrived'
-  | 'delivered';
+  | 'delivered'
+  | 'cancelled';
 
 export interface StudentProfile {
   uid: string;

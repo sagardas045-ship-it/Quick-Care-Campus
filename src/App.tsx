@@ -34,6 +34,10 @@ import {
   RELIEF_KITS,
   WELLNESS_PASS_PRICE,
 } from './data/campusData';
+import {
+  isValidBundledKitImagePath,
+  resolveKitImagePath,
+} from './data/kitAssets';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import {
   CampusOrder,
@@ -54,7 +58,7 @@ import { LiveTrackerView } from './components/LiveTrackerView';
 import { OrderHistoryView } from './components/OrderHistoryView';
 import { SharedTrackerView } from './components/SharedTrackerView';
 import { OperationsView } from './components/OperationsView';
-import { publishSharedTracker } from './utils/sharedTracker';
+import { publishSharedTracker, syncSharedTrackerStatus } from './utils/sharedTracker';
 import {
   buildOrderStatusCopy,
   OrderStatusNotification,
@@ -134,11 +138,28 @@ const LEGACY_CATEGORY_UPGRADES: Record<string, ReliefKit['category']> = {
   'Hydration & Cramps': 'Hydration & Energy',
 };
 
-function mergeCatalogWithDefaults(existingKits: ReliefKit[]): {
+type RawFirestoreKit = ReliefKit & { imageUrl?: string };
+
+function sanitizeKitForFirestore(kit: ReliefKit): ReliefKit {
+  return {
+    id: kit.id,
+    name: kit.name,
+    category: kit.category,
+    price: kit.price,
+    contents: kit.contents,
+    reliefFor: kit.reliefFor,
+    imagePath: kit.imagePath,
+    etaMinutes: kit.etaMinutes,
+    sealedCode: kit.sealedCode,
+    inStock: kit.inStock,
+  };
+}
+
+function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
   merged: ReliefKit[];
   kitsToSync: ReliefKit[];
 } {
-  const existingById = new globalThis.Map<string, ReliefKit>();
+  const existingById = new globalThis.Map<string, RawFirestoreKit>();
   existingKits.forEach((kit) => existingById.set(kit.id, kit));
 
   const kitsToSync: ReliefKit[] = [];
@@ -151,19 +172,24 @@ function mergeCatalogWithDefaults(existingKits: ReliefKit[]): {
       kitsToSync.push(starter);
     } else {
       const hasValidCategory = VALID_KIT_CATEGORIES.has(existing.category);
+      const rawImage = (existing.imagePath || existing.imageUrl || '').trim();
+      const hasBrokenOrOutdatedImage =
+        !isValidBundledKitImagePath(rawImage) ||
+        rawImage !== starter.imagePath ||
+        Boolean(existing.imageUrl);
       const needsStarterUpgrade =
         !hasValidCategory ||
         existing.name !== starter.name ||
         existing.price !== starter.price ||
         existing.category !== starter.category ||
-        existing.imagePath !== starter.imagePath;
+        hasBrokenOrOutdatedImage;
 
       const upgradedKit: ReliefKit = needsStarterUpgrade
-        ? {
+        ? sanitizeKitForFirestore({
             ...starter,
-            inStock: existing.inStock,
-          }
-        : existing;
+            inStock: typeof existing.inStock === 'boolean' ? existing.inStock : starter.inStock,
+          })
+        : sanitizeKitForFirestore(existing);
       merged.push(upgradedKit);
       if (needsStarterUpgrade) {
         kitsToSync.push(upgradedKit);
@@ -175,11 +201,24 @@ function mergeCatalogWithDefaults(existingKits: ReliefKit[]): {
   for (const customKit of existingById.values()) {
     const mappedCategory =
       LEGACY_CATEGORY_UPGRADES[customKit.category] ?? customKit.category;
-    const normalizedCustom: ReliefKit = VALID_KIT_CATEGORIES.has(mappedCategory)
-      ? { ...customKit, category: mappedCategory }
-      : { ...customKit, category: 'First-Aid & Sprains' };
+    const normalizedCategory: ReliefKit['category'] = VALID_KIT_CATEGORIES.has(mappedCategory)
+      ? (mappedCategory as ReliefKit['category'])
+      : 'First-Aid & Sprains';
+    const rawImage = (customKit.imagePath || customKit.imageUrl || '').trim();
+    const resolvedImage = resolveKitImagePath(rawImage, customKit.id, normalizedCategory);
+    const needsCustomRepair =
+      normalizedCategory !== customKit.category ||
+      !isValidBundledKitImagePath(rawImage) ||
+      resolvedImage !== customKit.imagePath ||
+      Boolean(customKit.imageUrl);
+
+    const normalizedCustom = sanitizeKitForFirestore({
+      ...customKit,
+      category: normalizedCategory,
+      imagePath: resolvedImage,
+    });
     merged.push(normalizedCustom);
-    if (normalizedCustom.category !== customKit.category) {
+    if (needsCustomRepair) {
       kitsToSync.push(normalizedCustom);
     }
   }
@@ -211,7 +250,7 @@ export default function App() {
 
   // OTC Kits Catalog (synced with Firestore `kits` collection or Demo storage)
   const [kits, setKits] = useState<ReliefKit[]>(RELIEF_KITS);
-  const seededKitsRef = useRef(false);
+  const syncedKitSignaturesRef = useRef<Set<string>>(new Set());
 
   // Ordering state
   const [cart, setCart] = useState<CartItem[]>([
@@ -504,7 +543,7 @@ export default function App() {
         setActiveTab('order');
         setPrefilledPhone(null);
         setKits(RELIEF_KITS);
-        seededKitsRef.current = false;
+        syncedKitSignaturesRef.current.clear();
       }
     });
     return () => unsubscribe();
@@ -547,11 +586,13 @@ export default function App() {
       (snapshot) => {
         if (snapshot.empty) {
           setKits(RELIEF_KITS);
-          if (isCampusAdmin && !seededKitsRef.current) {
-            seededKitsRef.current = true;
+          if (isCampusAdmin) {
             for (const kit of RELIEF_KITS) {
+              const signature = `${kit.id}:${kit.imagePath}`;
+              if (syncedKitSignaturesRef.current.has(signature)) continue;
+              syncedKitSignaturesRef.current.add(signature);
               setDoc(doc(db, 'kits', kit.id), {
-                ...kit,
+                ...sanitizeKitForFirestore(kit),
                 updatedAt: serverTimestamp(),
               }).catch((err) =>
                 handleFirestoreError(err, OperationType.CREATE, `kits/${kit.id}`)
@@ -561,14 +602,16 @@ export default function App() {
           return;
         }
 
-        const loadedKits = snapshot.docs.map((d) => d.data() as ReliefKit);
+        const loadedKits = snapshot.docs.map((d) => d.data() as RawFirestoreKit);
         const { merged, kitsToSync } = mergeCatalogWithDefaults(loadedKits);
 
-        if (isCampusAdmin && kitsToSync.length > 0 && !seededKitsRef.current) {
-          seededKitsRef.current = true;
+        if (isCampusAdmin && kitsToSync.length > 0) {
           for (const kit of kitsToSync) {
+            const signature = `${kit.id}:${kit.imagePath}`;
+            if (syncedKitSignaturesRef.current.has(signature)) continue;
+            syncedKitSignaturesRef.current.add(signature);
             setDoc(doc(db, 'kits', kit.id), {
-              ...kit,
+              ...sanitizeKitForFirestore(kit),
               updatedAt: serverTimestamp(),
             }).catch((err) =>
               handleFirestoreError(err, OperationType.WRITE, `kits/${kit.id}`)
@@ -708,7 +751,7 @@ export default function App() {
       const found = orders.find((o) => o.id === selectedOrderId);
       if (found) return found;
     }
-    return orders.find((o) => o.status !== 'delivered') ?? orders[0];
+    return orders.find((o) => o.status !== 'delivered' && o.status !== 'cancelled') ?? orders[0];
   }, [orders, selectedOrderId]);
 
   const lastCompletedOrder = useMemo(() => {
@@ -1007,6 +1050,29 @@ export default function App() {
     [isDemoMode, currentUser]
   );
 
+  const handleCancelOrder = useCallback(
+    async (order: CampusOrder): Promise<void> => {
+      if (order.status === 'delivered' || order.status === 'cancelled') return;
+
+      if (isDemoMode) {
+        handleDemoUpdateOrder(order.id, { status: 'cancelled' });
+        return;
+      }
+
+      const orderPath = `orders/${order.id}`;
+      try {
+        await updateDoc(doc(db, 'orders', order.id), {
+          status: 'cancelled',
+          updatedAt: serverTimestamp(),
+        });
+        syncSharedTrackerStatus(order.id, { status: 'cancelled' });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, orderPath);
+      }
+    },
+    [handleDemoUpdateOrder, isDemoMode]
+  );
+
   const quotaBanner = quotaExceeded ? (
     <div className="bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
       <span>
@@ -1190,7 +1256,9 @@ export default function App() {
       );
     }
 
-    const activeCount = orders.filter((o) => o.status !== 'delivered').length;
+    const activeCount = orders.filter(
+      (o) => o.status !== 'delivered' && o.status !== 'cancelled'
+    ).length;
     const completedCount = orders.filter((o) => o.status === 'delivered').length;
 
     return (
@@ -1398,6 +1466,7 @@ export default function App() {
               }}
               onPublishShareTracker={handlePublishShareTracker}
               onPreviewSharedLink={openSharedTrackPreview}
+              onCancelOrder={handleCancelOrder}
             />
           )}
         </main>

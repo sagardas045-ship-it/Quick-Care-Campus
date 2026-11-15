@@ -8,6 +8,7 @@ import {
   Truck,
   UserCheck,
   X,
+  XCircle,
 } from 'lucide-react';
 import { CampusOrder, OrderStatus } from '../types';
 
@@ -57,6 +58,12 @@ export function buildOrderStatusCopy(order: CampusOrder): {
         title: `Order Delivered · #${order.id}`,
         message: `Handover complete! Tap to rate your delivery with ${order.runnerName}.`,
       };
+    case 'cancelled':
+      return {
+        stageLabel: 'Order Cancelled',
+        title: `Order Cancelled · #${order.id}`,
+        message: `Your delivery order to ${order.hostelName} was cancelled.`,
+      };
   }
 }
 
@@ -91,6 +98,12 @@ function getStatusAccent(status: OrderStatus) {
         iconBg: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/70',
         labelText: 'text-emerald-700 dark:text-emerald-300',
         Icon: CheckCircle2,
+      };
+    case 'cancelled':
+      return {
+        iconBg: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/70',
+        labelText: 'text-rose-700 dark:text-rose-300',
+        Icon: XCircle,
       };
   }
 }

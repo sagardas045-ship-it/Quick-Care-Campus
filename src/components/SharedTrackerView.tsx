@@ -93,6 +93,12 @@ function getStatusHeadline(status: OrderStatus, hostelName: string): {
         title: `Handover completed at ${hostelName}`,
         tone: 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/70 text-emerald-800 dark:text-emerald-200',
       };
+    case 'cancelled':
+      return {
+        badge: 'Cancelled',
+        title: `Order for ${hostelName} was cancelled`,
+        tone: 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800/70 text-rose-800 dark:text-rose-200',
+      };
   }
 }
 
@@ -202,7 +208,9 @@ export function SharedTrackerView({
 
   const secondsRemaining = useMemo(() => {
     if (!tracker) return 0;
-    if (tracker.status === 'delivered' || tracker.trackerStep === 4) return 0;
+    if (tracker.status === 'delivered' || tracker.status === 'cancelled' || tracker.trackerStep === 4) {
+      return 0;
+    }
     if (tracker.trackerStep === 3) return 320;
     if (tracker.trackerStep === 2) return 780;
     return (tracker.deliveryMinutes || 16) * 60;

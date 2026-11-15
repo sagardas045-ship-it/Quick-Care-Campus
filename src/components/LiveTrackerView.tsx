@@ -101,6 +101,13 @@ function getDeliveryProgressState(order: CampusOrder): {
   statusSummary: string;
 } {
   switch (order.status) {
+    case 'cancelled':
+      return {
+        activeIndex: 0,
+        allDone: false,
+        progressPercent: 0,
+        statusSummary: 'Order Cancelled before delivery',
+      };
     case 'delivered':
       return {
         activeIndex: 5,
@@ -176,7 +183,11 @@ export function LiveTrackerView({
   // Sync timer & simulation reset when active order changes
   useEffect(() => {
     if (!activeOrder) return;
-    if (activeOrder.status === 'delivered' || activeOrder.trackerStep === 4) {
+    if (
+      activeOrder.status === 'delivered' ||
+      activeOrder.status === 'cancelled' ||
+      activeOrder.trackerStep === 4
+    ) {
       setSecondsRemaining(0);
       setSimulating(false);
     } else if (activeOrder.trackerStep === 1) {
@@ -199,7 +210,12 @@ export function LiveTrackerView({
 
   // 1-second ETA countdown
   useEffect(() => {
-    if (!activeOrder || activeOrder.trackerStep >= 4 || activeOrder.status === 'delivered') {
+    if (
+      !activeOrder ||
+      activeOrder.trackerStep >= 4 ||
+      activeOrder.status === 'delivered' ||
+      activeOrder.status === 'cancelled'
+    ) {
       return;
     }
     const timer = window.setInterval(() => {
@@ -211,7 +227,11 @@ export function LiveTrackerView({
   // Smooth Runner Movement Simulation writing live coordinates & statuses to Firestore
   useEffect(() => {
     if (!simulating || !activeOrder || routePath.length < 2) return;
-    if (activeOrder.status === 'delivered' || activeOrder.trackerStep >= 4) {
+    if (
+      activeOrder.status === 'delivered' ||
+      activeOrder.status === 'cancelled' ||
+      activeOrder.trackerStep >= 4
+    ) {
       setSimulating(false);
       return;
     }
@@ -304,10 +324,12 @@ export function LiveTrackerView({
     );
   }
 
+  const isCancelled = activeOrder.status === 'cancelled';
   const isArrivedOrDelivered =
     activeOrder.trackerStep === 4 ||
     activeOrder.status === 'arrived' ||
-    activeOrder.status === 'delivered';
+    activeOrder.status === 'delivered' ||
+    isCancelled;
 
   const progressRatio =
     activeOrder.status === 'delivered' || activeOrder.trackerStep === 4
@@ -396,7 +418,9 @@ export function LiveTrackerView({
           >
             {simulating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             <span>
-              {isArrivedOrDelivered
+              {isCancelled
+                ? 'Order Cancelled'
+                : isArrivedOrDelivered
                 ? 'Runner at Hostel Gate'
                 : simulating
                 ? 'Pause Runner Simulation'
@@ -725,7 +749,9 @@ export function LiveTrackerView({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <span className="text-xs font-medium text-teal-300">
-                  {activeOrder.status === 'delivered'
+                  {isCancelled
+                    ? 'Order Cancelled'
+                    : activeOrder.status === 'delivered'
                     ? 'Order Completed & Verified'
                     : isArrivedOrDelivered
                     ? 'Runner Arrived at Hostel Gate'

@@ -120,10 +120,22 @@ export function EmergencyOrderView({
     useState<SymptomCategory>('All Kits');
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [selectedDetailKit, setSelectedDetailKit] = useState<ReliefKit | null>(null);
   const [flyingBadge, setFlyingBadge] = useState<{ key: number; label: string } | null>(null);
   const [reorderedFeedback, setReorderedFeedback] = useState(false);
   const [curfewClock, setCurfewClock] = useState(() => getCurfewStatus());
   const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (!selectedDetailKit) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedDetailKit(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedDetailKit]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -454,15 +466,22 @@ export function EmergencyOrderView({
                   }`}
                 >
                   <div>
-                    {/* 4:3 Photorealistic Image with Zoom-on-Hover & Authentic Sealed OTC Badge */}
-                    <div className="aspect-[4/3] w-full bg-slate-100 dark:bg-slate-800">
+                    {/* Uniform 4:3 Photorealistic Image with Gradient Backdrop, Zoom-on-Hover & Quick View */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDetailKit(kit)}
+                      aria-label={`View details for ${kit.name}`}
+                      className="block relative w-full aspect-[4/3] min-h-36 bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 overflow-hidden text-left focus-visible:outline-2 focus-visible:outline-teal-600"
+                    >
                       <KitImage
                         src={kit.imagePath}
                         alt={kit.name}
                         code={kit.sealedCode}
+                        kitId={kit.id}
+                        category={kit.category}
                         showSealBadge={true}
                       />
-                    </div>
+                    </button>
 
                     <div className="p-4 space-y-2">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
@@ -484,9 +503,13 @@ export function EmergencyOrderView({
                       </div>
 
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-snug">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDetailKit(kit)}
+                          className="text-left text-sm sm:text-base font-bold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-300 leading-snug transition-colors"
+                        >
                           {kit.name}
-                        </h3>
+                        </button>
                         <span className="text-base sm:text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-teal-300 shrink-0">
                           ₹{kit.price}
                         </span>
@@ -762,6 +785,150 @@ export function EmergencyOrderView({
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+      {/* Product Detail Modal */}
+      <AnimatePresence>
+        {selectedDetailKit && (() => {
+          const modalQty = getCartQty(selectedDetailKit.id);
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedDetailKit(null)}
+              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/65 backdrop-blur-xs p-0 sm:p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Product details for ${selectedDetailKit.name}`}
+            >
+              <motion.div
+                initial={shouldReduceMotion ? false : { y: 28, opacity: 0, scale: 0.98 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={shouldReduceMotion ? undefined : { y: 28, opacity: 0, scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col shadow-2xl"
+              >
+                <div className="relative w-full aspect-[4/3] min-h-36 bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 shrink-0">
+                  <KitImage
+                    src={selectedDetailKit.imagePath}
+                    alt={selectedDetailKit.name}
+                    code={selectedDetailKit.sealedCode}
+                    kitId={selectedDetailKit.id}
+                    category={selectedDetailKit.category}
+                    showSealBadge={true}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDetailKit(null)}
+                    aria-label="Close product detail modal"
+                    className="absolute top-3 right-3 min-h-[44px] min-w-[44px] rounded-2xl bg-slate-900/75 hover:bg-slate-900 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-md transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto p-5 space-y-4">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="font-semibold text-teal-700 dark:text-teal-400">
+                        {selectedDetailKit.category}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="font-mono">{selectedDetailKit.sealedCode}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="tabular-nums">{selectedDetailKit.etaMinutes} min ETA</span>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-snug">
+                        {selectedDetailKit.name}
+                      </h3>
+                      <span className="text-xl font-bold font-mono tabular-nums text-teal-700 dark:text-teal-300 shrink-0">
+                        ₹{selectedDetailKit.price}
+                      </span>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {selectedDetailKit.reliefFor}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-2">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">
+                      Sealed OTC Kit Contents
+                    </p>
+                    <ul className="space-y-1.5">
+                      {selectedDetailKit.contents.map((item) => (
+                        <li
+                          key={item}
+                          className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2"
+                        >
+                          <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="pt-1 flex items-center justify-between gap-3">
+                    <span
+                      className={`text-xs font-semibold ${
+                        selectedDetailKit.inStock
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-rose-700 dark:text-rose-400'
+                      }`}
+                    >
+                      {selectedDetailKit.inStock ? 'In Stock · Ready for Express Dispatch' : 'Currently Out of Stock'}
+                    </span>
+
+                    {!selectedDetailKit.inStock ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 text-xs font-semibold cursor-not-allowed"
+                      >
+                        Out of Stock
+                      </button>
+                    ) : modalQty === 0 ? (
+                      <motion.button
+                        type="button"
+                        whileTap={shouldReduceMotion ? undefined : { scale: 0.95 }}
+                        onClick={() => triggerAddFeedback(selectedDetailKit, cart.length === 0)}
+                        className="min-h-[44px] px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-semibold border-b-[3px] border-teal-800 flex items-center gap-1.5 shrink-0"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Kit · ₹{selectedDetailKit.price}</span>
+                      </motion.button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onUpdateQuantity(selectedDetailKit.id, -1)}
+                          aria-label={`Remove one ${selectedDetailKit.name}`}
+                          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className="w-7 text-center text-sm font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+                          {modalQty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => triggerAddFeedback(selectedDetailKit, false)}
+                          aria-label={`Add one more ${selectedDetailKit.name}`}
+                          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-teal-600 text-white border-b-[3px] border-teal-800"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
     </div>
   );
