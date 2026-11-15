@@ -28,7 +28,7 @@ import {
   SymptomCategory,
   UpiProvider,
 } from '../types';
-import { KitImage } from './KitImage';
+import { ProductPhoto } from './ProductPhoto';
 import { CheckoutForm } from './CheckoutForm';
 
 interface EmergencyOrderViewProps {
@@ -466,21 +466,14 @@ export function EmergencyOrderView({
                   }`}
                 >
                   <div>
-                    {/* Uniform 4:3 Photorealistic Image with Gradient Backdrop, Zoom-on-Hover & Quick View */}
+                    {/* Uniform 4:3 Studio Product Photograph with Rounded Top Corners & Quick View */}
                     <button
                       type="button"
                       onClick={() => setSelectedDetailKit(kit)}
                       aria-label={`View details for ${kit.name}`}
-                      className="block relative w-full aspect-[4/3] min-h-36 bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 overflow-hidden text-left focus-visible:outline-2 focus-visible:outline-teal-600"
+                      className="block relative w-full aspect-[4/3] min-h-36 rounded-t-3xl bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 overflow-hidden text-left focus-visible:outline-2 focus-visible:outline-teal-600"
                     >
-                      <KitImage
-                        src={kit.imagePath}
-                        alt={kit.name}
-                        code={kit.sealedCode}
-                        kitId={kit.id}
-                        category={kit.category}
-                        showSealBadge={true}
-                      />
+                      <ProductPhoto product={kit} showSealBadge={true} />
                     </button>
 
                     <div className="p-4 space-y-2">
@@ -810,14 +803,7 @@ export function EmergencyOrderView({
                 className="w-full max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col shadow-2xl"
               >
                 <div className="relative w-full aspect-[4/3] min-h-36 bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 shrink-0">
-                  <KitImage
-                    src={selectedDetailKit.imagePath}
-                    alt={selectedDetailKit.name}
-                    code={selectedDetailKit.sealedCode}
-                    kitId={selectedDetailKit.id}
-                    category={selectedDetailKit.category}
-                    showSealBadge={true}
-                  />
+                  <ProductPhoto product={selectedDetailKit} showSealBadge={true} />
                   <button
                     type="button"
                     onClick={() => setSelectedDetailKit(null)}

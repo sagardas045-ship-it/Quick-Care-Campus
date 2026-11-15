@@ -19,10 +19,12 @@ import {
   Package,
   PackageCheck,
   Plus,
+  RefreshCw,
   ShieldAlert,
   Star,
   TrendingUp,
   Truck,
+  Upload,
   X,
   XCircle,
 } from 'lucide-react';
@@ -36,9 +38,15 @@ import {
   RUNNER_PAYOUT,
   SYMPTOM_FILTERS,
 } from '../data/campusData';
+import { CATEGORY_FALLBACK_ASSETS } from '../data/kitAssets';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { CampusOrder, OrderFeedback, ReliefKit, SymptomCategory } from '../types';
-import { KitImage } from './KitImage';
+import { ProductPhoto } from './ProductPhoto';
+import {
+  compressImageToDataUrl,
+  regenerateStudioPhotoForKit,
+  writeCachedPhoto,
+} from '../utils/photoCache';
 import { syncSharedTrackerStatus } from '../utils/sharedTracker';
 
 interface OperationsViewProps {
@@ -100,6 +108,8 @@ export function OperationsView({
   // Inventory manager state
   const [inventoryCategory, setInventoryCategory] = useState<SymptomCategory>('All Kits');
   const [updatingKitId, setUpdatingKitId] = useState<string | null>(null);
+  const [regeneratingKitId, setRegeneratingKitId] = useState<string | null>(null);
+  const [uploadingKitId, setUploadingKitId] = useState<string | null>(null);
   const [showAddKitForm, setShowAddKitForm] = useState(false);
   const [newKitName, setNewKitName] = useState('');
   const [newKitCategory, setNewKitCategory] = useState<KitCategory>('Fever & Cold');
@@ -109,6 +119,8 @@ export function OperationsView({
   const [newKitContents, setNewKitContents] = useState('');
   const [newKitCode, setNewKitCode] = useState('');
   const [newKitImage, setNewKitImage] = useState(RELIEF_KITS[0].imagePath);
+  const [newKitPhotoDataUrl, setNewKitPhotoDataUrl] = useState<string | null>(null);
+  const [uploadingNewKitPhoto, setUploadingNewKitPhoto] = useState(false);
   const [kitFormError, setKitFormError] = useState<string | null>(null);
   const [kitNotice, setKitNotice] = useState<string | null>(null);
   const [savingNewKit, setSavingNewKit] = useState(false);
@@ -200,6 +212,30 @@ export function OperationsView({
     setPinInput('');
   };
 
+  const buildKitFirestoreDoc = (kit: ReliefKit) => {
+    const validPhotoDataUrl =
+      kit.photoDataUrl &&
+      kit.photoDataUrl.startsWith('data:image/') &&
+      kit.photoDataUrl.length <= 200000
+        ? kit.photoDataUrl
+        : null;
+
+    return {
+      id: kit.id,
+      name: kit.name,
+      category: kit.category,
+      price: kit.price,
+      contents: kit.contents,
+      reliefFor: kit.reliefFor,
+      imagePath: kit.imagePath,
+      ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
+      etaMinutes: kit.etaMinutes,
+      sealedCode: kit.sealedCode,
+      inStock: kit.inStock,
+      updatedAt: serverTimestamp(),
+    };
+  };
+
   const handleToggleKitStock = async (kit: ReliefKit) => {
     const nextInStock = !kit.inStock;
     setKitNotice(null);
@@ -215,19 +251,7 @@ export function OperationsView({
     setUpdatingKitId(kit.id);
     const kitPath = `kits/${kit.id}`;
     try {
-      await setDoc(doc(db, 'kits', kit.id), {
-        id: kit.id,
-        name: kit.name,
-        category: kit.category,
-        price: kit.price,
-        contents: kit.contents,
-        reliefFor: kit.reliefFor,
-        imagePath: kit.imagePath,
-        etaMinutes: kit.etaMinutes,
-        sealedCode: kit.sealedCode,
-        inStock: nextInStock,
-        updatedAt: serverTimestamp(),
-      });
+      await setDoc(doc(db, 'kits', kit.id), buildKitFirestoreDoc({ ...kit, inStock: nextInStock }));
       setKitNotice(
         `Firestore catalog updated: "${kit.name}" is now ${nextInStock ? 'In Stock' : 'Out of Stock'}.`
       );
@@ -235,6 +259,115 @@ export function OperationsView({
       handleFirestoreError(err, OperationType.WRITE, kitPath);
     } finally {
       setUpdatingKitId(null);
+    }
+  };
+
+  const handleRegenerateKitPhoto = async (kit: ReliefKit) => {
+    setKitNotice(null);
+    setRegeneratingKitId(kit.id);
+    try {
+      const { imagePath, photoDataUrl } = await regenerateStudioPhotoForKit(kit);
+      const updatedKit: ReliefKit = {
+        ...kit,
+        imagePath,
+        photoDataUrl,
+      };
+
+      if (!isCampusAdmin) {
+        onLocalKitUpdate?.(updatedKit);
+        setKitNotice(
+          `Refreshed studio photograph for "${kit.name}". Customer storefront preview updated immediately.`
+        );
+        return;
+      }
+
+      const kitPath = `kits/${kit.id}`;
+      try {
+        await setDoc(doc(db, 'kits', kit.id), buildKitFirestoreDoc(updatedKit));
+        setKitNotice(
+          `Refreshed and synced studio photograph for "${kit.name}" across Customer Storefront and Admin Inventory.`
+        );
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, kitPath);
+      }
+    } catch {
+      setKitNotice(`Unable to regenerate studio photo for "${kit.name}". Please try again.`);
+    } finally {
+      setRegeneratingKitId(null);
+    }
+  };
+
+  const handleUploadKitPhoto = async (kit: ReliefKit, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setKitNotice('Please choose a valid image file (JPG, PNG, or WebP).');
+      return;
+    }
+
+    setKitNotice(null);
+    setUploadingKitId(kit.id);
+    try {
+      const photoDataUrl = await compressImageToDataUrl(file, {
+        targetWidth: 480,
+        targetHeight: 360,
+        quality: 0.82,
+      });
+      if (!photoDataUrl.startsWith('data:image/') || photoDataUrl.length > 200000) {
+        setKitNotice('Selected image is too large after compression. Please pick a smaller photo.');
+        return;
+      }
+
+      writeCachedPhoto(kit.id, photoDataUrl, 'custom-upload');
+      const updatedKit: ReliefKit = {
+        ...kit,
+        photoDataUrl,
+      };
+
+      if (!isCampusAdmin) {
+        onLocalKitUpdate?.(updatedKit);
+        setKitNotice(
+          `Uploaded custom photo for "${kit.name}". Customer storefront preview updated immediately.`
+        );
+        return;
+      }
+
+      const kitPath = `kits/${kit.id}`;
+      try {
+        await setDoc(doc(db, 'kits', kit.id), buildKitFirestoreDoc(updatedKit));
+        setKitNotice(
+          `Uploaded and synced custom studio photo for "${kit.name}" to live storefront.`
+        );
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, kitPath);
+      }
+    } catch {
+      setKitNotice(`Could not process uploaded image for "${kit.name}".`);
+    } finally {
+      setUploadingKitId(null);
+    }
+  };
+
+  const handleUploadNewKitPhoto = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setKitFormError('Please select a JPG, PNG, or WebP product photo.');
+      return;
+    }
+    setKitFormError(null);
+    setUploadingNewKitPhoto(true);
+    try {
+      const compressed = await compressImageToDataUrl(file, {
+        targetWidth: 480,
+        targetHeight: 360,
+        quality: 0.82,
+      });
+      if (!compressed.startsWith('data:image/') || compressed.length > 200000) {
+        setKitFormError('Uploaded photo is too large. Please pick a smaller image.');
+        return;
+      }
+      setNewKitPhotoDataUrl(compressed);
+    } catch {
+      setKitFormError('Unable to read the selected image file. Please try another photo.');
+    } finally {
+      setUploadingNewKitPhoto(false);
     }
   };
 
@@ -293,10 +426,15 @@ export function OperationsView({
       contents: parsedContents,
       reliefFor: newKitRelief.trim().slice(0, 200),
       imagePath: newKitImage,
+      ...(newKitPhotoDataUrl ? { photoDataUrl: newKitPhotoDataUrl } : {}),
       etaMinutes: Math.round(parsedEta),
       sealedCode,
       inStock: true,
     };
+
+    if (newKitPhotoDataUrl) {
+      writeCachedPhoto(kitId, newKitPhotoDataUrl, 'custom-upload');
+    }
 
     if (!isCampusAdmin) {
       onLocalKitAdd?.(newKit);
@@ -307,6 +445,7 @@ export function OperationsView({
       setNewKitRelief('');
       setNewKitContents('');
       setNewKitCode('');
+      setNewKitPhotoDataUrl(null);
       setShowAddKitForm(false);
       return;
     }
@@ -314,15 +453,13 @@ export function OperationsView({
     setSavingNewKit(true);
     const kitPath = `kits/${kitId}`;
     try {
-      await setDoc(doc(db, 'kits', kitId), {
-        ...newKit,
-        updatedAt: serverTimestamp(),
-      });
+      await setDoc(doc(db, 'kits', kitId), buildKitFirestoreDoc(newKit));
       setKitNotice(`Added "${newKit.name}" to the live Firestore OTC catalog.`);
       setNewKitName('');
       setNewKitRelief('');
       setNewKitContents('');
       setNewKitCode('');
+      setNewKitPhotoDataUrl(null);
       setShowAddKitForm(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, kitPath);
@@ -742,7 +879,13 @@ export function OperationsView({
                   <select
                     id="kit-category"
                     value={newKitCategory}
-                    onChange={(e) => setNewKitCategory(e.target.value as KitCategory)}
+                    onChange={(e) => {
+                      const nextCat = e.target.value as KitCategory;
+                      setNewKitCategory(nextCat);
+                      if (!newKitPhotoDataUrl) {
+                        setNewKitImage(CATEGORY_FALLBACK_ASSETS[nextCat]);
+                      }
+                    }}
                     className="w-full min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 focus:border-teal-600 focus:outline-none"
                   >
                     {KIT_CATEGORIES.map((cat) => (
@@ -830,22 +973,28 @@ export function OperationsView({
 
                 <div>
                   <label htmlFor="kit-image" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Kit Photography Asset
+                    Studio Product Photo (Preset or Upload)
                   </label>
                   <div className="flex items-center gap-2.5">
                     <div className="w-16 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200 dark:border-slate-700 shrink-0">
-                      <KitImage
-                        src={newKitImage}
-                        alt={newKitName || 'New emergency kit preview'}
-                        code={newKitCode || 'OTC'}
-                        category={newKitCategory}
+                      <ProductPhoto
+                        product={{
+                          name: newKitName || 'New emergency kit preview',
+                          category: newKitCategory,
+                          sealedCode: newKitCode || 'OTC',
+                          imagePath: newKitImage,
+                          ...(newKitPhotoDataUrl ? { photoDataUrl: newKitPhotoDataUrl } : {}),
+                        }}
                         compact={true}
                       />
                     </div>
                     <select
                       id="kit-image"
                       value={newKitImage}
-                      onChange={(e) => setNewKitImage(e.target.value)}
+                      onChange={(e) => {
+                        setNewKitImage(e.target.value);
+                        setNewKitPhotoDataUrl(null);
+                      }}
                       className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 focus:border-teal-600 focus:outline-none"
                     >
                       {RELIEF_KITS.map((preset) => (
@@ -854,6 +1003,21 @@ export function OperationsView({
                         </option>
                       ))}
                     </select>
+                    <label className="min-h-[44px] px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 cursor-pointer shrink-0">
+                      <Upload className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>{uploadingNewKitPhoto ? 'Loading...' : 'Upload'}</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        disabled={uploadingNewKitPhoto}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) void handleUploadNewKitPhoto(file);
+                        }}
+                      />
+                    </label>
                   </div>
                 </div>
               </div>
@@ -867,14 +1031,17 @@ export function OperationsView({
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddKitForm(false)}
+                  onClick={() => {
+                    setShowAddKitForm(false);
+                    setNewKitPhotoDataUrl(null);
+                  }}
                   className="min-h-[44px] px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={savingNewKit}
+                  disabled={savingNewKit || uploadingNewKitPhoto}
                   className="min-h-[44px] px-5 rounded-xl bg-slate-900 dark:bg-teal-600 hover:bg-slate-800 dark:hover:bg-teal-500 border-b-[3px] border-teal-500 dark:border-teal-800 text-white text-xs font-semibold"
                 >
                   {savingNewKit ? 'Saving Kit...' : 'Save Emergency Kit'}
@@ -886,71 +1053,113 @@ export function OperationsView({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredInventoryKits.map((kit, index) => {
               const isBusy = updatingKitId === kit.id;
+              const isRegenerating = regeneratingKitId === kit.id;
+              const isUploading = uploadingKitId === kit.id;
+              const isPhotoBusy = isRegenerating || isUploading;
+
               return (
                 <motion.article
                   key={kit.id}
                   initial={reduceMotion ? false : { opacity: 0, y: 12 }}
                   animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                   transition={{ duration: 0.22, delay: Math.min(index * 0.025, 0.2) }}
-                  className="group rounded-3xl border border-slate-200 dark:border-slate-800 border-b-[4px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-900 p-4 flex gap-3.5 items-center justify-between shadow-[0_10px_24px_-14px_rgba(15,23,42,0.14)]"
+                  className="group rounded-3xl border border-slate-200 dark:border-slate-800 border-b-[4px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-900 p-4 flex flex-col gap-3 shadow-[0_10px_24px_-14px_rgba(15,23,42,0.14)]"
                 >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-24 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
-                      <KitImage
-                        src={kit.imagePath}
-                        alt={kit.name}
-                        code={kit.sealedCode}
-                        kitId={kit.id}
-                        category={kit.category}
-                        compact={true}
-                      />
-                    </div>
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                        <span className="font-semibold text-teal-700 dark:text-teal-400">
-                          {kit.category}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span className="font-mono">{kit.sealedCode}</span>
+                  <div className="flex items-center justify-between gap-3.5">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-24 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
+                        <ProductPhoto product={kit} compact={true} />
                       </div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                        {kit.name}
-                      </h3>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                          ₹{kit.price}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span
-                          className={`font-semibold ${
-                            kit.inStock
-                              ? 'text-teal-700 dark:text-teal-400'
-                              : 'text-rose-700 dark:text-rose-400'
-                          }`}
-                        >
-                          {kit.inStock ? 'In Stock' : 'Out of Stock'}
-                        </span>
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                          <span className="font-semibold text-teal-700 dark:text-teal-400">
+                            {kit.category}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span className="font-mono">{kit.sealedCode}</span>
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                          {kit.name}
+                        </h3>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-mono font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                            ₹{kit.price}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span
+                            className={`font-semibold ${
+                              kit.inStock
+                                ? 'text-teal-700 dark:text-teal-400'
+                                : 'text-rose-700 dark:text-rose-400'
+                            }`}
+                          >
+                            {kit.inStock ? 'In Stock' : 'Out of Stock'}
+                          </span>
+                        </div>
                       </div>
                     </div>
+
+                    <motion.button
+                      type="button"
+                      whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+                      disabled={isBusy}
+                      onClick={() => void handleToggleKitStock(kit)}
+                      className={`min-h-[42px] px-3.5 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap shrink-0 border border-b-[3px] active:border-b active:translate-y-[2px] transition-all ${
+                        kit.inStock
+                          ? 'border-rose-200 dark:border-rose-800/60 border-b-rose-300 dark:border-b-rose-900 bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60'
+                          : 'border-teal-600 border-b-teal-800 bg-teal-600 text-white hover:bg-teal-500'
+                      }`}
+                    >
+                      {isBusy
+                        ? 'Saving...'
+                        : kit.inStock
+                        ? 'Mark Out of Stock'
+                        : 'Restock Kit'}
+                    </motion.button>
                   </div>
 
-                  <motion.button
-                    type="button"
-                    whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-                    disabled={isBusy}
-                    onClick={() => void handleToggleKitStock(kit)}
-                    className={`min-h-[44px] px-3.5 py-2 rounded-2xl text-xs font-semibold whitespace-nowrap shrink-0 border border-b-[3px] active:border-b active:translate-y-[2px] transition-all ${
-                      kit.inStock
-                        ? 'border-rose-200 dark:border-rose-800/60 border-b-rose-300 dark:border-b-rose-900 bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60'
-                        : 'border-teal-600 border-b-teal-800 bg-teal-600 text-white hover:bg-teal-500'
-                    }`}
-                  >
-                    {isBusy
-                      ? 'Saving...'
-                      : kit.inStock
-                      ? 'Mark Out of Stock'
-                      : 'Restock Kit'}
-                  </motion.button>
+                  {/* Admin Photo Refresh & Custom Upload Bar */}
+                  <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      {kit.photoDataUrl ? 'Custom / Cached Studio Photo' : 'Verified Studio Photo'}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isPhotoBusy}
+                        onClick={() => void handleRegenerateKitPhoto(kit)}
+                        className="min-h-[34px] px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 hover:border-teal-500 hover:text-teal-700 dark:hover:text-teal-300 text-slate-700 dark:text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-60"
+                      >
+                        <RefreshCw
+                          className={`w-3.5 h-3.5 text-teal-600 dark:text-teal-400 ${
+                            isRegenerating ? 'animate-spin' : ''
+                          }`}
+                        />
+                        <span>{isRegenerating ? 'Refreshing...' : 'Regenerate Photo'}</span>
+                      </button>
+
+                      <label
+                        className={`min-h-[34px] px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 hover:border-teal-500 hover:text-teal-700 dark:hover:text-teal-300 text-slate-700 dark:text-slate-200 text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                          isPhotoBusy ? 'opacity-60 pointer-events-none' : ''
+                        }`}
+                      >
+                        <Upload className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                        <span>{isUploading ? 'Uploading...' : 'Upload Photo'}</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="sr-only"
+                          disabled={isPhotoBusy}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (file) void handleUploadKitPhoto(kit, file);
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
                 </motion.article>
               );
             })}

@@ -34,10 +34,8 @@ import {
   RELIEF_KITS,
   WELLNESS_PASS_PRICE,
 } from './data/campusData';
-import {
-  isValidBundledKitImagePath,
-  resolveKitImagePath,
-} from './data/kitAssets';
+import { isValidBundledKitImagePath, resolveKitAssetUrl } from './data/kitAssets';
+import { writeCachedPhoto } from './utils/photoCache';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import {
   CampusOrder,
@@ -140,7 +138,17 @@ const LEGACY_CATEGORY_UPGRADES: Record<string, ReliefKit['category']> = {
 
 type RawFirestoreKit = ReliefKit & { imageUrl?: string };
 
+function getValidPhotoDataUrl(raw?: string | null): string | undefined {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('data:image/') || trimmed.length > 200000) {
+    return undefined;
+  }
+  return trimmed;
+}
+
 function sanitizeKitForFirestore(kit: ReliefKit): ReliefKit {
+  const validPhotoDataUrl = getValidPhotoDataUrl(kit.photoDataUrl);
   return {
     id: kit.id,
     name: kit.name,
@@ -149,6 +157,7 @@ function sanitizeKitForFirestore(kit: ReliefKit): ReliefKit {
     contents: kit.contents,
     reliefFor: kit.reliefFor,
     imagePath: kit.imagePath,
+    ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
     etaMinutes: kit.etaMinutes,
     sealedCode: kit.sealedCode,
     inStock: kit.inStock,
@@ -173,10 +182,18 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
     } else {
       const hasValidCategory = VALID_KIT_CATEGORIES.has(existing.category);
       const rawImage = (existing.imagePath || existing.imageUrl || '').trim();
+      const validPhotoDataUrl = getValidPhotoDataUrl(existing.photoDataUrl);
+      const hasValidBundledPath = isValidBundledKitImagePath(rawImage);
+      const resolvedImagePath = hasValidBundledPath
+        ? resolveKitAssetUrl(rawImage, starter.id, starter.category)
+        : starter.imagePath;
+
+      if (validPhotoDataUrl) {
+        writeCachedPhoto(starter.id, validPhotoDataUrl, resolvedImagePath);
+      }
+
       const hasBrokenOrOutdatedImage =
-        !isValidBundledKitImagePath(rawImage) ||
-        rawImage !== starter.imagePath ||
-        Boolean(existing.imageUrl);
+        !hasValidBundledPath || Boolean(existing.imageUrl);
       const needsStarterUpgrade =
         !hasValidCategory ||
         existing.name !== starter.name ||
@@ -187,9 +204,16 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
       const upgradedKit: ReliefKit = needsStarterUpgrade
         ? sanitizeKitForFirestore({
             ...starter,
+            imagePath: resolvedImagePath,
+            ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
             inStock: typeof existing.inStock === 'boolean' ? existing.inStock : starter.inStock,
           })
-        : sanitizeKitForFirestore(existing);
+        : sanitizeKitForFirestore({
+            ...existing,
+            imagePath: resolvedImagePath,
+            ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
+          });
+
       merged.push(upgradedKit);
       if (needsStarterUpgrade) {
         kitsToSync.push(upgradedKit);
@@ -205,7 +229,13 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
       ? (mappedCategory as ReliefKit['category'])
       : 'First-Aid & Sprains';
     const rawImage = (customKit.imagePath || customKit.imageUrl || '').trim();
-    const resolvedImage = resolveKitImagePath(rawImage, customKit.id, normalizedCategory);
+    const validPhotoDataUrl = getValidPhotoDataUrl(customKit.photoDataUrl);
+    const resolvedImage = resolveKitAssetUrl(rawImage, customKit.id, normalizedCategory);
+
+    if (validPhotoDataUrl) {
+      writeCachedPhoto(customKit.id, validPhotoDataUrl, resolvedImage);
+    }
+
     const needsCustomRepair =
       normalizedCategory !== customKit.category ||
       !isValidBundledKitImagePath(rawImage) ||
@@ -216,6 +246,7 @@ function mergeCatalogWithDefaults(existingKits: RawFirestoreKit[]): {
       ...customKit,
       category: normalizedCategory,
       imagePath: resolvedImage,
+      ...(validPhotoDataUrl ? { photoDataUrl: validPhotoDataUrl } : {}),
     });
     merged.push(normalizedCustom);
     if (needsCustomRepair) {
@@ -588,7 +619,7 @@ export default function App() {
           setKits(RELIEF_KITS);
           if (isCampusAdmin) {
             for (const kit of RELIEF_KITS) {
-              const signature = `${kit.id}:${kit.imagePath}`;
+              const signature = `${kit.id}:${kit.imagePath}:${kit.photoDataUrl ? kit.photoDataUrl.length : 0}`;
               if (syncedKitSignaturesRef.current.has(signature)) continue;
               syncedKitSignaturesRef.current.add(signature);
               setDoc(doc(db, 'kits', kit.id), {
@@ -607,7 +638,7 @@ export default function App() {
 
         if (isCampusAdmin && kitsToSync.length > 0) {
           for (const kit of kitsToSync) {
-            const signature = `${kit.id}:${kit.imagePath}`;
+            const signature = `${kit.id}:${kit.imagePath}:${kit.photoDataUrl ? kit.photoDataUrl.length : 0}`;
             if (syncedKitSignaturesRef.current.has(signature)) continue;
             syncedKitSignaturesRef.current.add(signature);
             setDoc(doc(db, 'kits', kit.id), {

@@ -1,7 +1,5 @@
 import { LatLngLiteral, ReliefKit, SymptomCategory } from '../types';
-import { HERO_KIT_ASSET, KIT_ASSETS_BY_ID } from './kitAssets';
-
-export const HERO_3D_KIT_IMAGE = HERO_KIT_ASSET;
+import { KIT_ASSETS_BY_ID } from './kitAssets';
 
 export const SYMPTOM_FILTERS: SymptomCategory[] = [
   'All Kits',

@@ -38,6 +38,7 @@ export interface ReliefKit {
   contents: string[];
   reliefFor: string;
   imagePath: string;
+  photoDataUrl?: string;
   etaMinutes: number;
   sealedCode: string;
   inStock: boolean;

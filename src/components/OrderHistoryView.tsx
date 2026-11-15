@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { CampusOrder, OrderFeedback, OrderStatus, ReliefKit } from '../types';
 import { buildSharedTrackerUrl } from '../utils/sharedTracker';
+import { ProductPhoto } from './ProductPhoto';
 
 type OrderStatusFilter = 'active' | 'delivered' | 'cancelled';
 
@@ -613,9 +614,37 @@ export function OrderHistoryView({
                         <span>Runner: {order.runnerName}</span>
                       </span>
                     </div>
-                    <p className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200">
-                      {order.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}
-                    </p>
+                    <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                      {order.items.map((item) => {
+                        const matchedKit = kitsById.get(item.kitId);
+                        return (
+                          <li
+                            key={`${order.id}-active-${item.kitId}`}
+                            className="py-2 first:pt-0.5 last:pb-0.5 flex items-center justify-between gap-3 text-xs sm:text-sm"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className="w-14 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
+                                <ProductPhoto
+                                  product={matchedKit ?? { id: item.kitId, name: item.name }}
+                                  compact={true}
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                                  {item.name}
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                                  Qty {item.quantity} × ₹{item.price}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="font-bold font-mono tabular-nums text-slate-900 dark:text-white shrink-0">
+                              ₹{item.price * item.quantity}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
                     {order.specialInstructions && (
                       <p className="text-xs text-slate-600 dark:text-slate-400 pt-1 border-t border-slate-200/70 dark:border-slate-800">
                         <span className="font-semibold text-slate-700 dark:text-slate-300">Note:</span>{' '}
@@ -740,19 +769,35 @@ export function OrderHistoryView({
                       Cancelled Items ({totalUnits} {totalUnits === 1 ? 'unit' : 'units'})
                     </p>
                     <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
-                      {order.items.map((item) => (
-                        <li
-                          key={`${order.id}-${item.kitId}`}
-                          className="py-1.5 first:pt-0.5 last:pb-0.5 flex items-center justify-between gap-3 text-xs sm:text-sm"
-                        >
-                          <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
-                            {item.name} × {item.quantity}
-                          </span>
-                          <span className="font-mono tabular-nums text-slate-600 dark:text-slate-400 shrink-0">
-                            ₹{item.price * item.quantity}
-                          </span>
-                        </li>
-                      ))}
+                      {order.items.map((item) => {
+                        const matchedKit = kitsById.get(item.kitId);
+                        return (
+                          <li
+                            key={`${order.id}-${item.kitId}`}
+                            className="py-2 first:pt-0.5 last:pb-0.5 flex items-center justify-between gap-3 text-xs sm:text-sm"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className="w-14 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
+                                <ProductPhoto
+                                  product={matchedKit ?? { id: item.kitId, name: item.name }}
+                                  compact={true}
+                                />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                                  {item.name}
+                                </p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                                  Qty {item.quantity} × ₹{item.price}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="font-mono tabular-nums text-slate-600 dark:text-slate-400 shrink-0">
+                              ₹{item.price * item.quantity}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
                     {order.specialInstructions && (
                       <p className="text-xs text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200/70 dark:border-slate-800">
@@ -851,18 +896,27 @@ export function OrderHistoryView({
                   <ul className="divide-y divide-slate-200/70 dark:divide-slate-800">
                     {order.items.map((item) => {
                       const lineTotal = item.price * item.quantity;
+                      const matchedKit = kitsById.get(item.kitId);
                       return (
                         <li
                           key={`${order.id}-${item.kitId}`}
                           className="py-2 first:pt-1 last:pb-1 flex items-center justify-between gap-3 text-xs sm:text-sm"
                         >
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-slate-900 dark:text-white truncate">
-                              {item.name}
-                            </p>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
-                              Qty {item.quantity} × ₹{item.price}
-                            </p>
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="w-14 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
+                              <ProductPhoto
+                                product={matchedKit ?? { id: item.kitId, name: item.name }}
+                                compact={true}
+                              />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-slate-900 dark:text-white truncate">
+                                {item.name}
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+                                Qty {item.quantity} × ₹{item.price}
+                              </p>
+                            </div>
                           </div>
                           <span className="font-bold font-mono tabular-nums text-slate-900 dark:text-white shrink-0">
                             ₹{lineTotal}

@@ -25,7 +25,7 @@ import {
   UpiProvider,
 } from '../types';
 import { HostelPinPickerMap } from './HostelPinPickerMap';
-import { KitImage } from './KitImage';
+import { ProductPhoto } from './ProductPhoto';
 
 interface CheckoutFormProps {
   profile: StudentProfile;
@@ -148,14 +148,7 @@ export function CheckoutForm({
             {cart.map(({ kit, quantity }) => (
               <div key={kit.id} className="flex items-center justify-between gap-3 p-3">
                 <div className="w-16 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
-                  <KitImage
-                    src={kit.imagePath}
-                    alt={kit.name}
-                    code={kit.sealedCode}
-                    kitId={kit.id}
-                    category={kit.category}
-                    compact={true}
-                  />
+                  <ProductPhoto product={kit} compact={true} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">

@@ -1,157 +1,203 @@
 import type { SymptomCategory } from '../types';
 
-import hero3dMedicalKitImg from '../assets/images/hero_3d_medical_kit_1794601028244.jpg';
 import feverFluImg from '../assets/images/realistic_fever_kit_1794594888003.jpg';
 import steamNasalImg from '../assets/images/realistic_steam_nasal_kit_1794601028978.jpg';
-import coughSyrupImg from '../assets/images/realistic_cough_syrup_kit_1794601032731.jpg';
-import headacheImg from '../assets/images/realistic_headache_kit_1794594889552.jpg';
-import eyecareSinusImg from '../assets/images/realistic_eyecare_sinus_kit_1794601029299.jpg';
+import coughSootherImg from '../assets/images/realistic_cough_syrup_kit_1794601032731.jpg';
+import headacheAcidityImg from '../assets/images/realistic_headache_kit_1794594889552.jpg';
+import sinusEyecareImg from '../assets/images/realistic_eyecare_sinus_kit_1794601029299.jpg';
 import migraineDarkroomImg from '../assets/images/realistic_migraine_darkroom_kit_1794601874371.jpg';
-import acidityGasImg from '../assets/images/realistic_acidity_gas_kit_1794601029816.jpg';
-import tummyProbioticImg from '../assets/images/realistic_tummy_probiotic_kit_1794601030574.jpg';
+import canteenAcidityImg from '../assets/images/realistic_acidity_gas_kit_1794601029816.jpg';
+import tummyRecoveryImg from '../assets/images/realistic_tummy_probiotic_kit_1794601030574.jpg';
 import motionIndigestionImg from '../assets/images/realistic_motion_indigestion_kit_1794601875271.jpg';
 import firstAidImg from '../assets/images/realistic_firstaid_kit_1794594889724.jpg';
-import sprainSprayImg from '../assets/images/realistic_sprain_spray_kit_1794601031440.jpg';
+import sportsSprainImg from '../assets/images/realistic_sprain_spray_kit_1794601031440.jpg';
 import skinRashImg from '../assets/images/realistic_skin_rash_kit_1794601032454.jpg';
-import hydrationImg from '../assets/images/realistic_hydration_kit_1794594889489.jpg';
-import studyEnergyImg from '../assets/images/realistic_study_energy_kit_1794601030335.jpg';
+import dehydrationImg from '../assets/images/realistic_hydration_kit_1794594889489.jpg';
+import studyHydrationImg from '../assets/images/realistic_study_energy_kit_1794601030335.jpg';
 import fatigueResetImg from '../assets/images/realistic_fatigue_reset_kit_1794601874860.jpg';
-import periodKitImg from '../assets/images/realistic_period_kit_1794594890300.jpg';
+import periodCareImg from '../assets/images/realistic_period_kit_1794594890300.jpg';
 import intimateComfortImg from '../assets/images/realistic_intimate_comfort_kit_1794601031912.jpg';
 import heavyFlowImg from '../assets/images/realistic_heavy_flow_kit_1794601876070.jpg';
-import n95SanitizerImg from '../assets/images/realistic_n95_sanitizer_kit_1794601031772.jpg';
+import fluHygieneImg from '../assets/images/realistic_n95_sanitizer_kit_1794601031772.jpg';
 import dentalUlcerImg from '../assets/images/realistic_dental_ulcer_kit_1794601032171.jpg';
-import lensEarImg from '../assets/images/realistic_lens_ear_kit_1794601876279.jpg';
+import lensEarCareImg from '../assets/images/realistic_lens_ear_kit_1794601876279.jpg';
 import deepSleepImg from '../assets/images/realistic_deep_sleep_kit_1794601875361.jpg';
 import calmDownImg from '../assets/images/realistic_calm_down_kit_1794601877760.jpg';
 import drySkinRescueImg from '../assets/images/realistic_dry_skin_rescue_kit_1794601878031.jpg';
 
-import legacyFeverFluImg from '../assets/images/fever_flu_kit_1794508326147.jpg';
-import legacyHeadacheAcidityImg from '../assets/images/headache_acidity_kit_1794508327343.jpg';
-import legacyFirstAidCutImg from '../assets/images/first_aid_cut_pack_1794508327129.jpg';
-import legacyDehydrationImg from '../assets/images/dehydration_recovery_combo_1794508328099.jpg';
-import legacyPeriodCrampImg from '../assets/images/period_cramp_relief_box_1794508327752.jpg';
+import altFeverFluImg from '../assets/images/fever_flu_kit_1794508326147.jpg';
+import altFirstAidImg from '../assets/images/first_aid_cut_pack_1794508327129.jpg';
+import altHeadacheImg from '../assets/images/headache_acidity_kit_1794508327343.jpg';
+import altHydrationImg from '../assets/images/dehydration_recovery_combo_1794508328099.jpg';
+import altPeriodImg from '../assets/images/period_cramp_relief_box_1794508327752.jpg';
+import heroMedicalKitImg from '../assets/images/hero_3d_medical_kit_1794601028244.jpg';
 
 export type KitCategory = Exclude<SymptomCategory, 'All Kits'>;
 
-export const HERO_KIT_ASSET = hero3dMedicalKitImg;
+export const HERO_KIT_ASSET = heroMedicalKitImg;
 
 export const KIT_ASSETS_BY_ID: Record<string, string> = {
   'kit-fever-flu': feverFluImg,
   'kit-steam-nasal': steamNasalImg,
-  'kit-cough-soother': coughSyrupImg,
-  'kit-headache-acidity': headacheImg,
-  'kit-sinus-eyecare': eyecareSinusImg,
+  'kit-cough-soother': coughSootherImg,
+  'kit-headache-acidity': headacheAcidityImg,
+  'kit-sinus-eyecare': sinusEyecareImg,
   'kit-migraine-darkroom': migraineDarkroomImg,
-  'kit-canteen-acidity': acidityGasImg,
-  'kit-tummy-recovery': tummyProbioticImg,
+  'kit-canteen-acidity': canteenAcidityImg,
+  'kit-tummy-recovery': tummyRecoveryImg,
   'kit-motion-indigestion': motionIndigestionImg,
   'kit-first-aid': firstAidImg,
-  'kit-sports-sprain': sprainSprayImg,
+  'kit-sports-sprain': sportsSprainImg,
   'kit-skin-rash': skinRashImg,
-  'kit-dehydration': hydrationImg,
-  'kit-study-hydration': studyEnergyImg,
+  'kit-dehydration': dehydrationImg,
+  'kit-study-hydration': studyHydrationImg,
   'kit-fatigue-reset': fatigueResetImg,
-  'kit-period-care': periodKitImg,
+  'kit-period-care': periodCareImg,
   'kit-intimate-comfort': intimateComfortImg,
   'kit-heavy-flow': heavyFlowImg,
-  'kit-flu-hygiene': n95SanitizerImg,
+  'kit-flu-hygiene': fluHygieneImg,
   'kit-dental-ulcer': dentalUlcerImg,
-  'kit-lens-ear-care': lensEarImg,
+  'kit-lens-ear-care': lensEarCareImg,
   'kit-deep-sleep': deepSleepImg,
   'kit-calm-down': calmDownImg,
   'kit-dry-skin-rescue': drySkinRescueImg,
 };
 
-export const CATEGORY_DEFAULT_ASSET: Record<KitCategory, string> = {
+export const CATEGORY_FALLBACK_ASSETS: Record<KitCategory, string> = {
   'Fever & Cold': feverFluImg,
-  'Headache & Migraine': headacheImg,
-  'Stomach & Acidity': acidityGasImg,
+  'Headache & Migraine': headacheAcidityImg,
+  'Stomach & Acidity': canteenAcidityImg,
   'First-Aid & Sprains': firstAidImg,
-  'Hydration & Energy': hydrationImg,
-  'Period & Cramp Care': periodKitImg,
-  'Personal Hygiene & Masks': n95SanitizerImg,
+  'Hydration & Energy': dehydrationImg,
+  'Period & Cramp Care': periodCareImg,
+  'Personal Hygiene & Masks': fluHygieneImg,
   'Sleep & Wellness': deepSleepImg,
 };
 
-const KIT_ASSETS_BY_FILENAME: Record<string, string> = {
-  'hero_3d_medical_kit_1794601028244.jpg': hero3dMedicalKitImg,
-  'realistic_fever_kit_1794594888003.jpg': feverFluImg,
-  'realistic_steam_nasal_kit_1794601028978.jpg': steamNasalImg,
-  'realistic_cough_syrup_kit_1794601032731.jpg': coughSyrupImg,
-  'realistic_headache_kit_1794594889552.jpg': headacheImg,
-  'realistic_eyecare_sinus_kit_1794601029299.jpg': eyecareSinusImg,
-  'realistic_migraine_darkroom_kit_1794601874371.jpg': migraineDarkroomImg,
-  'realistic_acidity_gas_kit_1794601029816.jpg': acidityGasImg,
-  'realistic_tummy_probiotic_kit_1794601030574.jpg': tummyProbioticImg,
-  'realistic_motion_indigestion_kit_1794601875271.jpg': motionIndigestionImg,
-  'realistic_firstaid_kit_1794594889724.jpg': firstAidImg,
-  'realistic_sprain_spray_kit_1794601031440.jpg': sprainSprayImg,
-  'realistic_skin_rash_kit_1794601032454.jpg': skinRashImg,
-  'realistic_hydration_kit_1794594889489.jpg': hydrationImg,
-  'realistic_study_energy_kit_1794601030335.jpg': studyEnergyImg,
-  'realistic_fatigue_reset_kit_1794601874860.jpg': fatigueResetImg,
-  'realistic_period_kit_1794594890300.jpg': periodKitImg,
-  'realistic_intimate_comfort_kit_1794601031912.jpg': intimateComfortImg,
-  'realistic_heavy_flow_kit_1794601876070.jpg': heavyFlowImg,
-  'realistic_n95_sanitizer_kit_1794601031772.jpg': n95SanitizerImg,
-  'realistic_dental_ulcer_kit_1794601032171.jpg': dentalUlcerImg,
-  'realistic_lens_ear_kit_1794601876279.jpg': lensEarImg,
-  'realistic_deep_sleep_kit_1794601875361.jpg': deepSleepImg,
-  'realistic_calm_down_kit_1794601877760.jpg': calmDownImg,
-  'realistic_dry_skin_rescue_kit_1794601878031.jpg': drySkinRescueImg,
-  'fever_flu_kit_1794508326147.jpg': legacyFeverFluImg,
-  'headache_acidity_kit_1794508327343.jpg': legacyHeadacheAcidityImg,
-  'first_aid_cut_pack_1794508327129.jpg': legacyFirstAidCutImg,
-  'dehydration_recovery_combo_1794508328099.jpg': legacyDehydrationImg,
-  'period_cramp_relief_box_1794508327752.jpg': legacyPeriodCrampImg,
+export const CATEGORY_STUDIO_VARIANTS: Record<KitCategory, string[]> = {
+  'Fever & Cold': [feverFluImg, altFeverFluImg, steamNasalImg, coughSootherImg, heroMedicalKitImg],
+  'Headache & Migraine': [headacheAcidityImg, altHeadacheImg, sinusEyecareImg, migraineDarkroomImg],
+  'Stomach & Acidity': [canteenAcidityImg, tummyRecoveryImg, motionIndigestionImg, heroMedicalKitImg],
+  'First-Aid & Sprains': [firstAidImg, altFirstAidImg, sportsSprainImg, skinRashImg, heroMedicalKitImg],
+  'Hydration & Energy': [dehydrationImg, altHydrationImg, studyHydrationImg, fatigueResetImg],
+  'Period & Cramp Care': [periodCareImg, altPeriodImg, intimateComfortImg, heavyFlowImg],
+  'Personal Hygiene & Masks': [fluHygieneImg, dentalUlcerImg, lensEarCareImg, heroMedicalKitImg],
+  'Sleep & Wellness': [deepSleepImg, calmDownImg, drySkinRescueImg, heroMedicalKitImg],
 };
 
-const BUNDLED_ASSET_SET = new Set<string>(Object.values(KIT_ASSETS_BY_FILENAME));
+const ALL_BUNDLED_ASSET_URLS = Array.from(
+  new Set<string>([
+    ...Object.values(KIT_ASSETS_BY_ID),
+    ...Object.values(CATEGORY_STUDIO_VARIANTS).flat(),
+    heroMedicalKitImg,
+  ])
+);
 
-function extractFilename(rawPath: string): string {
-  const withoutQuery = rawPath.split('?')[0].split('#')[0];
-  const segments = withoutQuery.split('/');
-  return segments[segments.length - 1] ?? '';
+export const VALID_BUNDLED_ASSET_URLS = new Set<string>(ALL_BUNDLED_ASSET_URLS);
+
+const BUNDLED_ASSET_BY_STEM = new globalThis.Map<string, string>();
+for (const url of ALL_BUNDLED_ASSET_URLS) {
+  const stem = url.match(/([a-z0-9_]+_1794\d+)/i)?.[1];
+  if (stem) {
+    BUNDLED_ASSET_BY_STEM.set(stem, url);
+  }
 }
 
-export function resolveKitImagePath(
-  rawPath?: string | null,
-  kitId?: string,
-  category?: KitCategory
-): string {
-  const trimmed = (rawPath ?? '').trim();
-
-  if (kitId && KIT_ASSETS_BY_ID[kitId]) {
-    return KIT_ASSETS_BY_ID[kitId];
+function findMatchingBundledAsset(rawPath?: string | null): string | null {
+  if (!rawPath) return null;
+  const trimmed = rawPath.trim();
+  if (VALID_BUNDLED_ASSET_URLS.has(trimmed)) {
+    return trimmed;
   }
-
-  if (trimmed) {
-    if (BUNDLED_ASSET_SET.has(trimmed)) {
-      return trimmed;
-    }
-
-    const filename = extractFilename(trimmed);
-    if (filename && KIT_ASSETS_BY_FILENAME[filename]) {
-      return KIT_ASSETS_BY_FILENAME[filename];
-    }
-
-    if (trimmed.startsWith('data:image/')) {
-      return trimmed;
-    }
+  const stem = trimmed.match(/([a-z0-9_]+_1794\d+)/i)?.[1];
+  if (stem && BUNDLED_ASSET_BY_STEM.has(stem)) {
+    return BUNDLED_ASSET_BY_STEM.get(stem) ?? null;
   }
-
-  if (category && CATEGORY_DEFAULT_ASSET[category]) {
-    return CATEGORY_DEFAULT_ASSET[category];
-  }
-
-  return feverFluImg;
+  return null;
 }
 
 export function isValidBundledKitImagePath(rawPath?: string | null): boolean {
-  const trimmed = (rawPath ?? '').trim();
-  if (!trimmed) return false;
-  if (BUNDLED_ASSET_SET.has(trimmed)) return true;
-  if (trimmed.startsWith('data:image/')) return true;
-  return false;
+  return Boolean(findMatchingBundledAsset(rawPath));
+}
+
+export function resolveKitAssetUrl(
+  rawPath?: string | null,
+  kitId?: string,
+  category?: KitCategory | string
+): string {
+  const matchedBundled = findMatchingBundledAsset(rawPath);
+
+  if (kitId && KIT_ASSETS_BY_ID[kitId]) {
+    return matchedBundled ?? KIT_ASSETS_BY_ID[kitId];
+  }
+
+  if (rawPath) {
+    const trimmed = rawPath.trim();
+    if (trimmed.startsWith('data:image/')) {
+      return trimmed;
+    }
+    if (matchedBundled) {
+      return matchedBundled;
+    }
+    if (trimmed.startsWith('vector://')) {
+      const strippedId = trimmed.replace('vector://', '').trim();
+      if (KIT_ASSETS_BY_ID[strippedId]) {
+        return KIT_ASSETS_BY_ID[strippedId];
+      }
+    }
+  }
+
+  if (category && category in CATEGORY_FALLBACK_ASSETS) {
+    return CATEGORY_FALLBACK_ASSETS[category as KitCategory];
+  }
+
+  return heroMedicalKitImg;
+}
+
+const FALLBACK_COLORS: Record<
+  KitCategory,
+  { bg1: string; bg2: string; box: string; lid: string; accent: string }
+> = {
+  'Fever & Cold': { bg1: '#ecfeff', bg2: '#ccfbf1', box: '#0f766e', lid: '#2dd4bf', accent: '#ffffff' },
+  'Headache & Migraine': { bg1: '#eef2ff', bg2: '#dbeafe', box: '#3730a3', lid: '#818cf8', accent: '#ffffff' },
+  'Stomach & Acidity': { bg1: '#ecfdf5', bg2: '#d1fae5', box: '#047857', lid: '#34d399', accent: '#ffffff' },
+  'First-Aid & Sprains': { bg1: '#fef2f2', bg2: '#e2e8f0', box: '#ffffff', lid: '#f8fafc', accent: '#dc2626' },
+  'Hydration & Energy': { bg1: '#f0f9ff', bg2: '#cffafe', box: '#0284c7', lid: '#38bdf8', accent: '#ffffff' },
+  'Period & Cramp Care': { bg1: '#fff1f2', bg2: '#fce7f3', box: '#be123c', lid: '#fb7185', accent: '#ffffff' },
+  'Personal Hygiene & Masks': { bg1: '#f0fdfa', bg2: '#e0f2fe', box: '#0f172a', lid: '#2dd4bf', accent: '#ffffff' },
+  'Sleep & Wellness': { bg1: '#f5f3ff', bg2: '#e0e7ff', box: '#5b21b6', lid: '#a78bfa', accent: '#ffffff' },
+};
+
+export function getCategoryFallbackDataUri(
+  category?: KitCategory | string,
+  sealedCode = 'OTC'
+): string {
+  const palette =
+    category && category in FALLBACK_COLORS
+      ? FALLBACK_COLORS[category as KitCategory]
+      : FALLBACK_COLORS['Fever & Cold'];
+  const cleanCode = (sealedCode || 'OTC').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 12);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="${palette.bg1}"/>
+        <stop offset="100%" stop-color="${palette.bg2}"/>
+      </linearGradient>
+    </defs>
+    <rect width="320" height="240" fill="url(#g)"/>
+    <ellipse cx="160" cy="192" rx="96" ry="15" fill="#0f172a" fill-opacity="0.14"/>
+    <g transform="translate(72,42)">
+      <polygon points="20,34 106,12 178,36 92,60" fill="${palette.lid}"/>
+      <polygon points="20,34 92,60 92,144 20,116" fill="${palette.box}" fill-opacity="0.82"/>
+      <polygon points="92,60 178,36 178,120 92,144" fill="${palette.box}"/>
+      <polyline points="20,34 92,60 178,36" fill="none" stroke="#ffffff" stroke-opacity="0.65" stroke-width="2"/>
+      <rect x="129" y="76" width="12" height="32" rx="3" fill="${palette.accent}"/>
+      <rect x="119" y="86" width="32" height="12" rx="3" fill="${palette.accent}"/>
+    </g>
+    <rect x="218" y="16" width="86" height="22" rx="7" fill="#0f172a" fill-opacity="0.78"/>
+    <text x="261" y="31" text-anchor="middle" fill="#ffffff" font-family="monospace" font-size="11" font-weight="700">${cleanCode}</text>
+  </svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
