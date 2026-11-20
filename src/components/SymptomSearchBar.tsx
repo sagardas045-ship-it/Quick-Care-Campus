@@ -104,17 +104,17 @@ export function SymptomSearchBar({
 
   return (
     <div className="space-y-2.5">
-      {/* Sleek Rounded Glassmorphism Search Input with Tactile Voice Button */}
+      {/* Clean Pure-White Search & Hands-Free Voice Input */}
       <div
-        className={`relative flex items-center rounded-2xl backdrop-blur-xl transition-all duration-200 ${
+        className={`relative flex items-center rounded-2xl transition-colors duration-150 ${
           isListening
-            ? 'bg-white/95 dark:bg-slate-900/95 border-2 border-rose-500/80 dark:border-teal-400/80 shadow-[0_0_0_4px_rgba(244,63,94,0.14),0_16px_32px_-16px_rgba(13,148,136,0.35)] dark:shadow-[0_0_0_4px_rgba(45,212,191,0.16),0_16px_32px_-16px_rgba(0,0,0,0.65)]'
-            : 'bg-white/85 dark:bg-slate-900/85 border border-slate-200/90 dark:border-slate-700/85 shadow-[0_10px_28px_-14px_rgba(15,23,42,0.14)] dark:shadow-[0_12px_30px_-14px_rgba(0,0,0,0.55)] focus-within:border-teal-600 dark:focus-within:border-teal-400 focus-within:ring-4 focus-within:ring-teal-500/15'
+            ? 'bg-white dark:bg-slate-900 border-2 border-rose-500 dark:border-teal-400 shadow-sm'
+            : 'bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-700 focus-within:border-[#0D9488] dark:focus-within:border-teal-400 focus-within:ring-2 focus-within:ring-[#0D9488]/15'
         }`}
       >
         <Search
           aria-hidden="true"
-          className={`w-4 h-4 sm:w-5 sm:h-5 ml-4 shrink-0 transition-colors ${
+          className={`w-5 h-5 ml-4 shrink-0 transition-colors ${
             isListening
               ? 'text-rose-500 dark:text-teal-400'
               : 'text-slate-400 dark:text-slate-500'
@@ -131,26 +131,26 @@ export function SymptomSearchBar({
           }}
           placeholder={placeholder}
           aria-label={inputAriaLabel}
-          className="flex-1 min-w-0 min-h-[50px] sm:min-h-[52px] bg-transparent px-3 text-sm sm:text-[15px] text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
+          className="flex-1 min-w-0 min-h-[52px] bg-transparent px-3 text-base text-[#0F172A] dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none"
         />
 
-        <div className="flex items-center gap-1.5 pr-2 shrink-0">
+        <div className="flex items-center gap-1 pr-1.5 shrink-0">
           {value.length > 0 && (
             <button
               type="button"
               onClick={handleClear}
               aria-label="Clear search query"
               title="Clear search"
-              className="min-h-[38px] min-w-[38px] rounded-xl flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600"
+              className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488]"
             >
               <X className="w-4 h-4" />
             </button>
           )}
 
-          {/* Prominent Tactile Hands-Free Voice Search Button */}
+          {/* Tactile Hands-Free Voice Search Button */}
           <motion.button
             type="button"
-            whileTap={shouldReduceMotion ? undefined : { scale: 0.94, y: 1 }}
+            whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
             onClick={handleMicClick}
             disabled={isRequesting}
             aria-label={
@@ -166,18 +166,18 @@ export function SymptomSearchBar({
                 ? 'Listening — tap to stop'
                 : 'Speak your symptom hands-free (en-IN)'
             }
-            className={`min-h-[40px] px-3 sm:px-3.5 rounded-xl border-b-[3px] text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
+            className={`min-h-[44px] min-w-[44px] px-3 sm:px-3.5 rounded-xl text-xs sm:text-sm font-semibold inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
               isListening
-                ? 'bg-gradient-to-r from-rose-600 to-teal-600 text-white border-rose-800 shadow-[0_0_16px_rgba(244,63,94,0.4)]'
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
                 : isRequesting
-                ? 'bg-amber-500 text-white border-amber-700 cursor-wait'
-                : 'bg-slate-900 dark:bg-teal-600 hover:bg-slate-800 dark:hover:bg-teal-500 text-white border-slate-950 dark:border-teal-800 active:border-b-0 active:translate-y-[2px]'
+                ? 'bg-amber-500 text-white cursor-wait'
+                : 'bg-[#0D9488] hover:bg-teal-700 text-white'
             }`}
           >
             {isRequesting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                <span className="hidden xs:inline sm:inline">Mic...</span>
+                <span className="hidden sm:inline">Mic...</span>
               </>
             ) : isListening ? (
               <>
@@ -186,15 +186,15 @@ export function SymptomSearchBar({
               </>
             ) : (
               <>
-                <Mic className="w-4 h-4 shrink-0 text-teal-300 dark:text-white" />
-                <span className="hidden sm:inline">Voice Search</span>
+                <Mic className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">Voice</span>
               </>
             )}
           </motion.button>
         </div>
       </div>
 
-      {/* Glowing Pulsing Listening Indicator with Soundwave Bars */}
+      {/* Clean Voice Listening Banner with Animated Soundwave Bars */}
       <AnimatePresence>
         {(isListening || isRequesting) && (
           <motion.div
@@ -204,7 +204,7 @@ export function SymptomSearchBar({
             transition={{ duration: 0.16 }}
             role="status"
             aria-live="polite"
-            className="rounded-2xl border border-rose-300/80 dark:border-teal-500/50 bg-gradient-to-r from-rose-50/95 via-white to-teal-50/95 dark:from-rose-950/50 dark:via-slate-900 dark:to-teal-950/60 px-3.5 py-2.5 flex items-center justify-between gap-3 shadow-sm"
+            className="rounded-2xl border border-rose-200 dark:border-teal-700 bg-white dark:bg-slate-900 px-4 py-3 flex items-center justify-between gap-3"
           >
             <div className="flex items-center gap-3 min-w-0">
               <span className="relative flex h-3 w-3 shrink-0" aria-hidden="true">

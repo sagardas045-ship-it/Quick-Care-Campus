@@ -3,12 +3,10 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   ArrowRight,
   Check,
-  Clock,
-  MapPin,
+  Info,
   Minus,
   Plus,
   RotateCcw,
-  ShieldAlert,
   ShieldCheck,
   ShoppingBag,
   Stethoscope,
@@ -57,44 +55,48 @@ interface EmergencyOrderViewProps {
   lastCompletedOrder?: CampusOrder | null;
   onReorderRecent?: (order: CampusOrder) => void;
   onOpenConsultDoctor?: () => void;
+  autoOpenCheckout?: boolean;
+  onAutoOpenCheckoutHandled?: () => void;
 }
 
-function getCurfewStatus(): {
-  isActive: boolean;
+interface QuickSymptomTile {
+  id: string;
+  emoji: string;
   label: string;
-  countdown: string;
-} {
-  const now = new Date();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const seconds = now.getSeconds();
-  const totalSecToday = hours * 3600 + minutes * 60 + seconds;
+  category?: Exclude<SymptomCategory, 'All Kits'>;
+  action?: 'doctor';
+}
 
-  const isCurfewWindow = hours >= 22 || hours < 6;
-  let diffSeconds = 0;
+const QUICK_SYMPTOM_TILES: QuickSymptomTile[] = [
+  { id: 'fever', emoji: '🤒', label: 'Fever', category: 'Fever & Cold' },
+  { id: 'headache', emoji: '🤕', label: 'Headache', category: 'Headache & Migraine' },
+  { id: 'acidity', emoji: '🤢', label: 'Acidity', category: 'Stomach & Acidity' },
+  { id: 'first-aid', emoji: '🩹', label: 'First-Aid', category: 'First-Aid & Sprains' },
+  { id: 'hydration', emoji: '💧', label: 'Hydration', category: 'Hydration & Energy' },
+  { id: 'doctor', emoji: '🩺', label: 'Ask Doctor', action: 'doctor' },
+];
 
-  if (isCurfewWindow) {
-    const targetSec = hours >= 22 ? 24 * 3600 + 6 * 3600 : 6 * 3600;
-    diffSeconds = Math.max(0, targetSec - totalSecToday);
-  } else {
-    diffSeconds = Math.max(0, 22 * 3600 - totalSecToday);
+function getUsageGuidance(kit: ReliefKit): string {
+  switch (kit.category) {
+    case 'Fever & Cold':
+      return 'Take after light food or warm water. Do not exceed recommended OTC tablet intervals; check body temperature every 4 hours.';
+    case 'Headache & Migraine':
+      return 'Rest in a dim, quiet room and hydrate well. Apply topical balms/strips gently to forehead avoiding eye contact.';
+    case 'Stomach & Acidity':
+      return 'Sip slowly after mixing sachets in room-temperature drinking water. Avoid spicy or heavy canteen food until settled.';
+    case 'First-Aid & Sprains':
+      return 'Clean minor cuts gently before dressing. For sprains, rest, elevate the limb, and wrap snugly without cutting circulation.';
+    case 'Hydration & Energy':
+      return 'Dissolve full ORS sachet in clean drinking water as printed on pack and sip steadily over 30–60 minutes.';
+    case 'Period & Cramp Care':
+      return 'Apply heat patch over thin clothing (never directly on bare skin) and hydrate with warm fluids.';
+    case 'Eye, Ear & Skin Care':
+      return 'Wash hands thoroughly before using drops or ointments. Avoid touching nozzle tips directly to skin, eyes, or ears.';
+    case 'Sleep & Wellness':
+      return 'Use 20–30 minutes before rest in a calm setting. Avoid screens and caffeine late at night.';
+    default:
+      return 'Follow sealed pack dosage instructions carefully. If symptoms worsen or persist beyond 24 hours, consult an on-call doctor.';
   }
-
-  const h = Math.floor(diffSeconds / 3600);
-  const m = Math.floor((diffSeconds % 3600) / 60);
-  const s = diffSeconds % 60;
-  const countdown = `${String(h).padStart(2, '0')}:${String(m).padStart(
-    2,
-    '0'
-  )}:${String(s).padStart(2, '0')}`;
-
-  return {
-    isActive: isCurfewWindow,
-    label: isCurfewWindow
-      ? 'Curfew Express Window Ends In'
-      : '24/7 Express Standby · Curfew Starts In',
-    countdown,
-  };
 }
 
 export function EmergencyOrderView({
@@ -121,40 +123,35 @@ export function EmergencyOrderView({
   lastCompletedOrder = null,
   onReorderRecent,
   onOpenConsultDoctor,
+  autoOpenCheckout = false,
+  onAutoOpenCheckoutHandled,
 }: EmergencyOrderViewProps) {
   const [selectedSymptom, setSelectedSymptom] =
     useState<SymptomCategory>('All Kits');
   const [searchQuery, setSearchQuery] = useState('');
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [checkoutSheetOpen, setCheckoutSheetOpen] = useState(false);
   const [selectedDetailKit, setSelectedDetailKit] = useState<ReliefKit | null>(null);
-  const [flyingBadge, setFlyingBadge] = useState<{ key: number; label: string } | null>(null);
   const [reorderedFeedback, setReorderedFeedback] = useState(false);
-  const [curfewClock, setCurfewClock] = useState(() => getCurfewStatus());
   const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!selectedDetailKit) return;
+    if (autoOpenCheckout) {
+      setCheckoutSheetOpen(true);
+      onAutoOpenCheckoutHandled?.();
+    }
+  }, [autoOpenCheckout, onAutoOpenCheckoutHandled]);
+
+  useEffect(() => {
+    if (!selectedDetailKit && !checkoutSheetOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setSelectedDetailKit(null);
+        if (selectedDetailKit) setSelectedDetailKit(null);
+        else if (checkoutSheetOpen) setCheckoutSheetOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedDetailKit]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setCurfewClock(getCurfewStatus());
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!flyingBadge) return;
-    const t = window.setTimeout(() => setFlyingBadge(null), 1100);
-    return () => window.clearTimeout(t);
-  }, [flyingBadge]);
+  }, [selectedDetailKit, checkoutSheetOpen]);
 
   useEffect(() => {
     if (!reorderedFeedback) return;
@@ -169,26 +166,20 @@ export function EmergencyOrderView({
 
     let availableUnits = 0;
     let availablePrice = 0;
-    const availableNames: string[] = [];
 
     lastCompletedOrder.items.forEach((item) => {
       const catalogKit = kitsById.get(item.kitId);
       if (catalogKit && catalogKit.inStock) {
         availableUnits += item.quantity;
         availablePrice += catalogKit.price * item.quantity;
-        availableNames.push(`${item.quantity}× ${catalogKit.name}`);
       }
     });
 
+    if (availableUnits === 0) return null;
     return {
       order: lastCompletedOrder,
       availableUnits,
       availablePrice,
-      availableNames,
-      summaryTitle:
-        availableNames.length > 0
-          ? `Reorder #${lastCompletedOrder.id}: ${availableNames.join(', ')}`
-          : `Items from #${lastCompletedOrder.id} are currently out of stock`,
     };
   }, [kits, lastCompletedOrder]);
 
@@ -205,13 +196,6 @@ export function EmergencyOrderView({
       setSelectedSymptom('All Kits');
     }
     setSearchQuery(nextValue);
-  };
-
-  const handleVoiceOrChipFilter = (nextQuery?: string) => {
-    setSelectedSymptom('All Kits');
-    if (typeof nextQuery === 'string') {
-      setSearchQuery(nextQuery);
-    }
   };
 
   const isKitInCart = (kitId?: string): boolean => {
@@ -250,216 +234,82 @@ export function EmergencyOrderView({
     !profile.wellnessPassActive && wellnessPassAdded ? WELLNESS_PASS_PRICE : 0;
   const totalPayable = subtotal + deliveryFee + passCost;
 
-  const triggerAddFeedback = (kit: ReliefKit) => {
-    if (!kit || typeof kit.id !== 'string' || kit.id.trim().length === 0) return;
-    setFlyingBadge({ key: Date.now(), label: kit.name });
-    onAddKit(kit);
-  };
-
-  const handleMobileConfirm = async () => {
+  const handleCheckoutConfirm = async () => {
     const ok = await onConfirmOrder();
     if (ok) {
-      setMobileDrawerOpen(false);
+      setCheckoutSheetOpen(false);
     }
+  };
+
+  const handleQuickTileClick = (tile: QuickSymptomTile) => {
+    if (tile.action === 'doctor') {
+      onOpenConsultDoctor?.();
+      return;
+    }
+    if (!tile.category) return;
+    setSearchQuery('');
+    setSelectedSymptom((prev) =>
+      prev === tile.category ? 'All Kits' : tile.category!
+    );
   };
 
   return (
     <div className="space-y-6">
-      {/* Smart Symptom Search Bar & Hands-Free Voice Search directly below Header */}
-      <section aria-label="Smart symptom and voice search">
+      {/* Step 1: Clean Search & Hands-Free Voice Mic Bar */}
+      <section aria-label="Search symptoms or medicines">
         <SymptomSearchBar
           value={searchQuery}
           onChange={handleSearchQueryChange}
           onVoiceActivate={() => setSelectedSymptom('All Kits')}
-          onQuickChipSelect={(chipQuery) => handleVoiceOrChipFilter(chipQuery)}
-          showQuickChips={true}
+          showQuickChips={false}
+          placeholder="Search fever, headache, ORS, pads, sprays..."
           resultCount={filteredKits.length}
           totalCount={kits.length}
         />
       </section>
 
-      {/* Interactive Clean Clinical Hero Banner */}
-      <motion.section
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        aria-label="Curfew Express Hero"
-        className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 shadow-[0_14px_34px_-18px_rgba(15,23,42,0.12)] dark:shadow-[0_24px_48px_-18px_rgba(0,0,0,0.65)] p-5 sm:p-7"
-      >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-teal-500/8 dark:bg-teal-500/15 blur-3xl"
-        />
-
-        <div className="relative z-10 space-y-4">
-          <div className="inline-flex items-center gap-2 rounded-xl bg-teal-50 dark:bg-teal-500/15 border border-teal-200 dark:border-teal-400/30 px-3 py-1.5 text-xs font-semibold text-teal-800 dark:text-teal-200">
-            <ShieldCheck className="w-3.5 h-3.5 text-teal-700 dark:text-teal-300 shrink-0" />
-            <span>16-Min Hostel Gate Express</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight text-slate-900 dark:text-white text-balance max-w-2xl">
-            Late-night OTC care delivered straight to your hostel gate
-          </h1>
-
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
-            Licensed 24/7 Dehradun partner pharmacy dispatch for{' '}
-            <span className="text-slate-900 dark:text-white font-semibold">{profile.hostelName}</span>
-            . Sealed OTC relief kits with live Google Maps GPS tracking.
-          </p>
-
-          {/* Live Curfew Countdown & Gate Info Strip */}
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <div className="rounded-2xl bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/15 px-3.5 py-2.5 flex items-center gap-3">
-              <Clock className="w-4 h-4 text-teal-700 dark:text-teal-300 shrink-0" />
-              <div>
-                <div className="text-[10px] font-medium text-slate-500 dark:text-teal-200/90">
-                  {curfewClock.label}
-                </div>
-                <div className="text-base sm:text-lg font-mono font-bold tracking-wider tabular-nums text-slate-900 dark:text-white">
-                  {curfewClock.countdown}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/15 px-3.5 py-2.5 flex items-center gap-2.5">
-              <MapPin className="w-4 h-4 text-amber-600 dark:text-amber-300 shrink-0" />
-              <div>
-                <div className="text-[10px] font-medium text-slate-500 dark:text-slate-300">
-                  Handover Gate Pin
-                </div>
-                <div className="text-xs font-semibold text-slate-900 dark:text-white truncate max-w-[200px]">
-                  {profile.hostelName} · Rm {profile.roomNumber}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.section>
-
-      {/* Glowing On-Call MBBS Doctor Teleconsultation Quick-Action Banner */}
-      {onOpenConsultDoctor && (
-        <motion.button
-          type="button"
-          whileTap={shouldReduceMotion ? undefined : { scale: 0.99 }}
-          onClick={onOpenConsultDoctor}
-          className="w-full text-left rounded-2xl bg-gradient-to-r from-teal-600 via-teal-700 to-slate-900 dark:from-teal-600/95 dark:via-teal-800 dark:to-slate-900 border border-teal-400/60 shadow-[0_0_28px_-6px_rgba(20,184,166,0.55)] hover:shadow-[0_0_34px_-4px_rgba(20,184,166,0.7)] px-4 sm:px-5 py-3.5 text-white flex flex-wrap items-center justify-between gap-3 transition-shadow focus-visible:outline-2 focus-visible:outline-teal-300"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
-              <Stethoscope className="w-5 h-5 text-teal-100" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs sm:text-sm font-bold leading-snug">
-                🩺 Unsure which medicine to take? Talk to an On-Call MBBS Doctor in 2 mins (₹99)
-              </div>
-              <div className="text-[11px] text-teal-100/90">
-                {profile.wellnessPassActive
-                  ? 'Wellness Pass Active: Instant ₹49 night consult + 1-tap prescription cart'
-                  : '10 PM – 6 AM curfew physicians · Video/Chat triage · 1-tap OTC cart'}
-              </div>
-            </div>
-          </div>
-          <span className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-white text-slate-950 text-xs font-bold whitespace-nowrap inline-flex items-center gap-1.5 shadow-sm shrink-0">
-            <span>Consult Now</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </span>
-        </motion.button>
-      )}
-
-      {/* 10-Category Tactile Selector & One-Click Reorder */}
-      <section aria-label="OTC categories and recent reorder" className="space-y-3.5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-              Emergency OTC Storefront
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {searchQuery.trim()
-                ? `Showing ${filteredKits.length} of ${kits.length} kits for "${searchQuery.trim()}"`
-                : `${kits.length} sealed hostel kits & essentials across ${Math.max(1, SYMPTOM_FILTERS.length - 1)} categories`}
-            </p>
-          </div>
-
-          {/* One-Click Reorder Recent Button */}
-          <motion.button
-            type="button"
-            whileTap={
-              shouldReduceMotion ||
-              !recentOrderMeta ||
-              recentOrderMeta.availableUnits === 0
-                ? undefined
-                : { scale: 0.96, y: 1 }
-            }
-            disabled={
-              !recentOrderMeta ||
-              recentOrderMeta.availableUnits === 0 ||
-              !onReorderRecent
-            }
-            onClick={() => {
-              if (!recentOrderMeta || !onReorderRecent) return;
-              onReorderRecent(recentOrderMeta.order);
-              setReorderedFeedback(true);
-            }}
-            title={
-              recentOrderMeta
-                ? recentOrderMeta.summaryTitle
-                : 'Available after your first delivered order'
-            }
-            className={`min-h-[44px] px-3.5 py-2 rounded-2xl border text-xs sm:text-sm font-semibold whitespace-nowrap inline-flex items-center justify-center gap-2 transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
-              reorderedFeedback
-                ? 'bg-emerald-600 text-white border-emerald-700 border-b-[3px] border-b-emerald-800 shadow-sm'
-                : recentOrderMeta && recentOrderMeta.availableUnits > 0
-                ? 'bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100/80 dark:hover:bg-teal-900/60 text-teal-800 dark:text-teal-200 border-teal-300 dark:border-teal-700 border-b-[3px] border-b-teal-500 active:border-b active:translate-y-[1px] shadow-xs'
-                : 'bg-slate-50 dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed'
-            }`}
-          >
-            {reorderedFeedback ? (
-              <>
-                <Check className="w-4 h-4 shrink-0" />
-                <span>Added to Cart</span>
-              </>
-            ) : (
-              <>
-                <RotateCcw className="w-4 h-4 shrink-0" />
-                <span>Reorder Recent</span>
-                {recentOrderMeta && recentOrderMeta.availableUnits > 0 && (
-                  <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-lg bg-teal-600/12 dark:bg-teal-400/15 text-teal-800 dark:text-teal-200 tabular-nums">
-                    {recentOrderMeta.availableUnits} · ₹{recentOrderMeta.availablePrice}
-                  </span>
-                )}
-              </>
-            )}
-          </motion.button>
+      {/* Step 2: Quick Symptom Shortcuts (2x3 Mobile Grid / 6-Tile Desktop Row) */}
+      <section aria-label="Quick symptom shortcuts" className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-[#0F172A] dark:text-white tracking-tight">
+            What do you need relief for?
+          </h2>
+          {selectedSymptom !== 'All Kits' && (
+            <button
+              type="button"
+              onClick={() => setSelectedSymptom('All Kits')}
+              className="min-h-[36px] px-2.5 text-xs font-semibold text-[#0D9488] dark:text-teal-300 hover:underline whitespace-nowrap"
+            >
+              Show all
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
-          {SYMPTOM_FILTERS.map((category, idx) => {
-            const active = selectedSymptom === category;
-            const catCount =
-              category === 'All Kits'
-                ? kits.length
-                : kits.filter((k) => k.category === category).length;
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5 sm:gap-3">
+          {QUICK_SYMPTOM_TILES.map((tile) => {
+            const isSelected =
+              Boolean(tile.category) && selectedSymptom === tile.category;
+            const isDoctorTile = tile.action === 'doctor';
             return (
               <motion.button
-                key={category}
+                key={tile.id}
                 type="button"
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.2,
-                  delay: shouldReduceMotion ? 0 : Math.min(idx * 0.025, 0.2),
-                }}
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.95, y: 2 }}
-                onClick={() => setSelectedSymptom(category)}
-                className={`min-h-[44px] px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
-                  active
-                    ? 'bg-slate-900 dark:bg-teal-600 text-white border border-slate-900 dark:border-teal-500 border-b-[4px] border-b-teal-500 dark:border-b-teal-800 shadow-[0_8px_18px_-6px_rgba(15,23,42,0.35)]'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-800 hover:border-teal-500 hover:text-teal-700 dark:hover:text-teal-300 shadow-xs'
+                whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+                onClick={() => handleQuickTileClick(tile)}
+                aria-pressed={isSelected}
+                className={`min-h-[82px] rounded-2xl border p-3 flex flex-col items-center justify-center gap-1.5 text-center transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
+                  isSelected
+                    ? 'bg-teal-50 dark:bg-teal-950/60 border-[#0D9488] text-[#0D9488] dark:text-teal-200'
+                    : isDoctorTile
+                    ? 'bg-teal-50/70 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800 text-[#0F172A] dark:text-teal-100 hover:border-[#0D9488]'
+                    : 'bg-white dark:bg-slate-900 border-[#E2E8F0] dark:border-slate-800 text-[#0F172A] dark:text-slate-100 hover:border-[#0D9488]'
                 }`}
               >
-                {category}{' '}
-                <span className="font-mono text-[11px] opacity-75 tabular-nums">
-                  ({catCount})
+                <span className="text-2xl leading-none" aria-hidden="true">
+                  {tile.emoji}
+                </span>
+                <span className="text-xs sm:text-sm font-semibold leading-tight whitespace-nowrap">
+                  {tile.label}
                 </span>
               </motion.button>
             );
@@ -467,347 +317,280 @@ export function EmergencyOrderView({
         </div>
       </section>
 
-      {/* Product Grid + Sticky Desktop 60-Second Checkout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {filteredKits.length === 0 ? (
-            <div className="sm:col-span-2 rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                No OTC kits matched &ldquo;{searchQuery}&rdquo;
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Try searching symptoms or brands like fever, ENO, Volini, eye drops, sprain, pads, or sleep.
-              </p>
+      {/* Step 3: Category Filter Row + Clean 2-Column Product Grid */}
+      <section aria-label="OTC Emergency Kits Catalog" className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-[#0F172A] dark:text-white tracking-tight">
+              {searchQuery.trim()
+                ? `Results for "${searchQuery.trim()}"`
+                : selectedSymptom === 'All Kits'
+                ? 'Emergency OTC Kits'
+                : selectedSymptom}
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {filteredKits.length} of {kits.length} sealed hostel essentials · 16 min gate delivery
+            </p>
+          </div>
+
+          {recentOrderMeta && onReorderRecent && (
+            <motion.button
+              type="button"
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+              onClick={() => {
+                onReorderRecent(recentOrderMeta.order);
+                setReorderedFeedback(true);
+              }}
+              className={`min-h-[44px] px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-semibold whitespace-nowrap inline-flex items-center gap-1.5 transition-colors ${
+                reorderedFeedback
+                  ? 'bg-[#0D9488] text-white border-[#0D9488]'
+                  : 'bg-white dark:bg-slate-900 text-[#0D9488] dark:text-teal-300 border-[#E2E8F0] dark:border-slate-700 hover:border-[#0D9488]'
+              }`}
+            >
+              {reorderedFeedback ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Added to Cart</span>
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reorder Last (₹{recentOrderMeta.availablePrice})</span>
+                </>
+              )}
+            </motion.button>
+          )}
+        </div>
+
+        {/* Clean Single-Row Horizontal Category Scroller */}
+        <div
+          role="tablist"
+          aria-label="Filter by kit category"
+          className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1"
+        >
+          {SYMPTOM_FILTERS.map((category) => {
+            const active = selectedSymptom === category;
+            const catCount =
+              category === 'All Kits'
+                ? kits.length
+                : kits.filter((k) => k.category === category).length;
+            return (
+              <button
+                key={category}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setSelectedSymptom(category)}
+                className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 border transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
+                  active
+                    ? 'bg-[#0F172A] dark:bg-[#0D9488] text-white border-[#0F172A] dark:border-[#0D9488]'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-[#E2E8F0] dark:border-slate-800 hover:border-[#0D9488] hover:text-[#0F172A] dark:hover:text-white'
+                }`}
+              >
+                {category} ({catCount})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Clean 2-Column Mobile / 3–4 Column Desktop Product Grid */}
+        {filteredKits.length === 0 ? (
+          <div className="rounded-2xl border border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center space-y-3">
+            <h3 className="text-lg font-bold text-[#0F172A] dark:text-white">
+              No kits matched &ldquo;{searchQuery}&rdquo;
+            </h3>
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+              Try searching for fever, headache, ORS, pads, Volini, eye drops, or tap below to browse all {kits.length} OTC kits.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => {
                   setSearchQuery('');
                   setSelectedSymptom('All Kits');
                 }}
-                className="min-h-[40px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold"
+                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-sm font-semibold"
               >
                 Show All {kits.length} Kits
               </button>
+              {onOpenConsultDoctor && (
+                <button
+                  type="button"
+                  onClick={onOpenConsultDoctor}
+                  className="min-h-[44px] px-5 py-2.5 rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#0F172A] dark:text-white text-sm font-semibold"
+                >
+                  Ask a 24/7 Doctor
+                </button>
+              )}
             </div>
-          ) : (
-            filteredKits.map((kit, idx) => {
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+            {filteredKits.map((kit) => {
               const qty = getCartQty(kit.id);
+              const briefContents = kit.contents.slice(0, 2).join(' • ');
               return (
-                <motion.article
+                <article
                   key={kit.id}
-                  layout="position"
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.24,
-                    delay: shouldReduceMotion ? 0 : Math.min(idx * 0.03, 0.24),
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
-                  whileHover={
-                    shouldReduceMotion || !kit.inStock ? undefined : { y: -4 }
-                  }
-                  className={`group rounded-3xl border border-b-[4px] overflow-hidden flex flex-col justify-between transition-shadow ${
+                  className={`rounded-2xl border overflow-hidden flex flex-col justify-between transition-colors ${
                     kit.inStock
-                      ? 'border-slate-200 dark:border-slate-800 border-b-slate-300/90 dark:border-b-slate-700 bg-white dark:bg-slate-900 shadow-[0_12px_28px_-14px_rgba(15,23,42,0.16)] dark:shadow-[0_14px_30px_-14px_rgba(0,0,0,0.6)] hover:shadow-[0_20px_36px_-14px_rgba(13,148,136,0.25)]'
-                      : 'border-slate-200 dark:border-slate-800 border-b-slate-200 dark:border-b-slate-800 bg-slate-50/80 dark:bg-slate-900/50 opacity-75'
+                      ? 'bg-white dark:bg-slate-900 border-[#E2E8F0] dark:border-slate-800 hover:border-teal-300 dark:hover:border-teal-700'
+                      : 'bg-slate-50 dark:bg-slate-900/50 border-[#E2E8F0] dark:border-slate-800 opacity-70'
                   }`}
                 >
-                  <div>
-                    {/* Uniform 4:3 Studio Product Photograph with Rounded Top Corners & Quick View */}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDetailKit(kit)}
-                      aria-label={`View details for ${kit.name}`}
-                      className="block relative w-full aspect-[4/3] min-h-36 rounded-t-3xl bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 overflow-hidden text-left focus-visible:outline-2 focus-visible:outline-teal-600"
-                    >
-                      <ProductPhoto product={kit} showSealBadge={true} />
-                    </button>
-
-                    <div className="p-4 space-y-2">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                        {kit.skuCode && (
-                          <>
-                            <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
-                              {kit.skuCode}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                          </>
-                        )}
-                        <span className="font-semibold text-teal-700 dark:text-teal-400">
-                          {kit.category}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                        <span className="tabular-nums">{kit.etaMinutes} min ETA</span>
-                        <span aria-hidden="true">·</span>
-                        <span
-                          className={
-                            kit.inStock
-                              ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
-                              : 'text-rose-700 dark:text-rose-400 font-semibold'
-                          }
-                        >
-                          {kit.inStock ? 'In Stock' : 'Out of Stock'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDetailKit(kit)}
-                          className="text-left text-sm sm:text-base font-bold text-slate-900 dark:text-white hover:text-teal-700 dark:hover:text-teal-300 leading-snug transition-colors"
-                        >
-                          {kit.name}
-                        </button>
-                        <span className="text-base sm:text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-teal-300 shrink-0">
-                          ₹{kit.price}
-                        </span>
-                      </div>
-
-                      {kit.subtitle && (
-                        <p className="text-[11px] font-medium text-teal-800 dark:text-teal-300 leading-snug">
-                          {kit.subtitle}
-                        </p>
-                      )}
-
-                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                        {kit.reliefFor}
-                      </p>
-
-                      <ul className="pt-1 space-y-1">
-                        {kit.contents.map((item) => (
-                          <li
-                            key={item}
-                            className="text-[11px] text-slate-600 dark:text-slate-400 flex items-start gap-1.5"
-                          >
-                            <span
-                              className="text-teal-600 dark:text-teal-400 font-bold leading-4"
-                              aria-hidden="true"
-                            >
-                              •
-                            </span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
+                  {/* Tappable Photo + Title + Contents Area -> Opens Detail Bottom Sheet */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDetailKit(kit)}
+                    aria-label={`View full details for ${kit.name}`}
+                    className="text-left flex-1 flex flex-col focus-visible:outline-2 focus-visible:outline-[#0D9488]"
+                  >
+                    <div className="w-full aspect-[4/3] bg-[#F8FAFC] dark:bg-slate-800 overflow-hidden border-b border-slate-100 dark:border-slate-800">
+                      <ProductPhoto product={kit} showSealBadge={false} />
                     </div>
-                  </div>
 
-                  {/* Tactile Bottom Action Bar */}
-                  <div className="px-4 pb-4 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono">
-                      {kit.sealedCode}
-                    </span>
+                    <div className="p-3.5 sm:p-4 space-y-1.5 flex-1">
+                      <h3 className="text-[15px] sm:text-base font-bold text-[#0F172A] dark:text-white leading-snug line-clamp-2">
+                        {kit.name}
+                      </h3>
+                      <p className="text-xs sm:text-[13px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
+                        {briefContents}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Bottom Price + High-Contrast + ADD / - 1 + Control */}
+                  <div className="px-3.5 sm:px-4 pb-3.5 sm:pb-4 pt-1 flex items-center justify-between gap-2">
+                    <div className="font-mono font-bold text-base sm:text-lg text-[#0F172A] dark:text-white tabular-nums">
+                      ₹{kit.price}
+                    </div>
 
                     {!kit.inStock ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-semibold cursor-not-allowed whitespace-nowrap"
-                      >
-                        Out of Stock
-                      </button>
+                      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                        Out of stock
+                      </span>
                     ) : !isKitInCart(kit.id) || qty === 0 ? (
                       <motion.button
                         type="button"
-                        whileTap={
-                          shouldReduceMotion ? undefined : { scale: 0.95, y: 2 }
-                        }
-                        onClick={() => triggerAddFeedback(kit)}
+                        whileTap={shouldReduceMotion ? undefined : { scale: 0.95 }}
+                        onClick={() => onAddKit(kit)}
                         aria-label={`Add ${kit.name} to cart`}
-                        className="min-h-[44px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-semibold border-b-[4px] border-teal-800 active:border-b-0 active:translate-y-[3px] whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-all focus-visible:outline-2 focus-visible:outline-teal-600"
+                        className="min-h-[44px] px-3.5 sm:px-4 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs sm:text-sm font-bold whitespace-nowrap shrink-0 flex items-center justify-center gap-1 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488]"
                       >
-                        <Plus className="w-4 h-4" />
-                        <span>Add</span>
+                        <Plus className="w-4 h-4 stroke-[2.5]" />
+                        <span>ADD</span>
                       </motion.button>
                     ) : (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center rounded-xl bg-[#0D9488] text-white overflow-hidden shrink-0">
                         <motion.button
                           type="button"
-                          whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
+                          whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
                           onClick={() => onUpdateQuantity(kit.id, -1)}
                           aria-label={`Remove one ${kit.name}`}
-                          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 active:border-b active:translate-y-[2px] transition-all"
+                          className="min-h-[44px] min-w-[36px] sm:min-w-[40px] flex items-center justify-center hover:bg-teal-700 transition-colors"
                         >
-                          <Minus className="w-4 h-4" />
+                          <Minus className="w-4 h-4 stroke-[2.5]" />
                         </motion.button>
-                        <motion.span
-                          key={qty}
-                          initial={shouldReduceMotion ? false : { scale: 1.4 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: 'spring', stiffness: 450, damping: 20 }}
-                          className="w-7 text-center text-sm font-mono font-bold text-slate-900 dark:text-white tabular-nums"
-                        >
+                        <span className="min-w-[22px] text-center text-sm font-mono font-bold tabular-nums">
                           {qty}
-                        </motion.span>
+                        </span>
                         <motion.button
                           type="button"
-                          whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
-                          onClick={() => triggerAddFeedback(kit)}
+                          whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
+                          onClick={() => onAddKit(kit)}
                           aria-label={`Add one more ${kit.name}`}
-                          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-teal-600 text-white border-b-[3px] border-teal-800 hover:bg-teal-500 active:border-b-0 active:translate-y-[2px] transition-all"
+                          className="min-h-[44px] min-w-[36px] sm:min-w-[40px] flex items-center justify-center hover:bg-teal-700 transition-colors"
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-4 h-4 stroke-[2.5]" />
                         </motion.button>
                       </div>
                     )}
                   </div>
-                </motion.article>
+                </article>
               );
-            })
-          )}
-
-          <div className="sm:col-span-2 lg:hidden rounded-2xl border border-amber-200 dark:border-amber-800/70 bg-amber-50/70 dark:bg-amber-950/40 p-4 flex items-start gap-3">
-            <ShieldAlert className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="text-xs text-amber-950 dark:text-amber-100 leading-relaxed">
-              <span className="font-semibold">Emergency Protocol:</span> Strictly
-              verified OTC essentials from licensed 24/7 partner pharmacies. No
-              prescription-only drugs.
-            </div>
+            })}
           </div>
-        </div>
-
-        {/* Sticky Desktop 3D Checkout Card */}
-        <aside className="hidden lg:block lg:col-span-5 sticky top-20 rounded-3xl border border-slate-200 dark:border-slate-800 border-b-[4px] border-b-slate-300 dark:border-b-slate-700 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl p-5 shadow-[0_16px_36px_-14px_rgba(15,23,42,0.14)] dark:shadow-[0_18px_40px_-14px_rgba(0,0,0,0.65)]">
-          <div className="pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                60-Second Checkout
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Auto-filled from your campus profile
-              </p>
-            </div>
-            <span className="text-xs font-semibold text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-xl whitespace-nowrap">
-              Curfew Express
-            </span>
-          </div>
-
-          <CheckoutForm
-            profile={profile}
-            cart={cart}
-            onUpdateQuantity={onUpdateQuantity}
-            onClearCart={onClearCart}
-            orderPin={orderPin}
-            onChangeOrderPin={onChangeOrderPin}
-            roomNumber={roomNumber}
-            onRoomNumberChange={onRoomNumberChange}
-            specialInstructions={specialInstructions}
-            onSpecialInstructionsChange={onSpecialInstructionsChange}
-            wellnessPassAdded={wellnessPassAdded}
-            onToggleWellnessPass={onToggleWellnessPass}
-            upiProvider={upiProvider}
-            onSelectUpi={onSelectUpi}
-            onConfirmOrder={() => void onConfirmOrder()}
-            submitting={submitting}
-            formError={formError}
-            isDarkMode={isDarkMode}
-          />
-        </aside>
-      </div>
-
-      {/* Flying Cart Badge Feedback Toast */}
-      <AnimatePresence>
-        {flyingBadge && (
-          <motion.div
-            key={flyingBadge.key}
-            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.85 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 28, scale: 0.7 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 24 }}
-            className="pointer-events-none fixed bottom-36 lg:bottom-6 right-4 sm:right-6 z-50"
-          >
-            <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 dark:bg-teal-600 text-white border border-teal-400/50 px-3.5 py-2 shadow-xl text-xs font-semibold">
-              <span className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shrink-0">
-                <Check className="w-3 h-3 stroke-[3]" />
-              </span>
-              <span className="max-w-[190px] truncate">+1 {flyingBadge.label}</span>
-            </div>
-          </motion.div>
         )}
-      </AnimatePresence>
+      </section>
 
-      {/* Animated Floating Mobile Cart Bar */}
+      {/* Sticky Floating Emerald Cart Bar (Mobile & Desktop) */}
       <AnimatePresence>
-        {totalItems > 0 && !mobileDrawerOpen && (
+        {totalItems > 0 && !checkoutSheetOpen && (
           <motion.div
-            initial={shouldReduceMotion ? false : { y: 40, opacity: 0 }}
+            initial={shouldReduceMotion ? false : { y: 24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={shouldReduceMotion ? undefined : { y: 40, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 360, damping: 28 }}
-            className="lg:hidden fixed bottom-[72px] left-0 right-0 z-30 px-4"
+            exit={shouldReduceMotion ? undefined : { y: 24, opacity: 0 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed bottom-[76px] left-0 right-0 z-30 px-4 pointer-events-none"
           >
             <motion.button
               type="button"
-              whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }}
-              onClick={() => setMobileDrawerOpen(true)}
-              className="w-full max-w-md mx-auto min-h-[54px] rounded-2xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 border border-slate-700 border-b-[4px] border-b-teal-500 active:border-b-0 active:translate-y-[3px] text-white px-4 py-3 flex items-center justify-between shadow-xl shadow-slate-900/30 transition-all"
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
+              onClick={() => setCheckoutSheetOpen(true)}
+              className="pointer-events-auto w-full max-w-2xl mx-auto min-h-[56px] rounded-2xl bg-[#0D9488] hover:bg-teal-700 text-white px-4 sm:px-5 py-3 flex items-center justify-between gap-3 shadow-lg shadow-teal-900/20 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0D9488]"
             >
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <ShoppingBag className="w-5 h-5 text-teal-400" />
-                  <motion.span
-                    key={totalItems}
-                    initial={shouldReduceMotion ? false : { scale: 1.55 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 18 }}
-                    className="absolute -top-2 -right-2 min-w-[18px] h-[18px] rounded-full bg-teal-500 text-slate-950 text-[10px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
-                  >
-                    {totalItems}
-                  </motion.span>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                  <ShoppingBag className="w-5 h-5 text-white" />
                 </div>
-                <div className="text-left">
-                  <div className="text-xs text-slate-300 tabular-nums">
-                    {totalItems} {totalItems === 1 ? 'Kit' : 'Kits'} ·{' '}
-                    {profile.hostelName}
+                <div className="text-left min-w-0">
+                  <div className="text-sm sm:text-base font-bold font-mono tabular-nums whitespace-nowrap">
+                    {totalItems} {totalItems === 1 ? 'Item' : 'Items'} • ₹{totalPayable}
                   </div>
-                  <div className="text-sm font-bold font-mono tabular-nums">
-                    Total ₹{totalPayable}
+                  <div className="text-xs text-teal-100 truncate">
+                    {deliveryFee === 0
+                      ? 'Free gate delivery applied'
+                      : `Includes ₹${deliveryFee} night gate delivery`}
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 text-sm font-semibold text-teal-300 whitespace-nowrap">
-                <span>Checkout</span>
-                <ArrowRight className="w-4 h-4" />
+
+              <div className="flex items-center gap-1.5 text-sm sm:text-base font-bold whitespace-nowrap shrink-0">
+                <span>View Cart &amp; Checkout</span>
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </div>
             </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Smooth Slide-Up Mobile Cart Checkout Drawer */}
+      {/* 1-Screen Express Checkout Bottom Sheet */}
       <AnimatePresence>
-        {mobileDrawerOpen && (
+        {checkoutSheetOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="lg:hidden fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-xs"
+            transition={{ duration: 0.16 }}
+            onClick={() => setCheckoutSheetOpen(false)}
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/50 backdrop-blur-xs p-0 sm:p-4"
             role="dialog"
             aria-modal="true"
-            aria-label="Fast Gate Checkout"
+            aria-label="Express Checkout"
           >
             <motion.div
               initial={shouldReduceMotion ? false : { y: '100%' }}
               animate={{ y: 0 }}
               exit={shouldReduceMotion ? undefined : { y: '100%' }}
-              transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-              className="w-full max-w-lg max-h-[90vh] rounded-t-3xl bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden shadow-2xl"
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-xl max-h-[92vh] rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 flex flex-col overflow-hidden shadow-2xl"
             >
-              <div className="pt-2.5 pb-3 px-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-                <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-3" />
-                <div className="flex items-center justify-between">
+              <div className="pt-3 pb-3.5 px-5 border-b border-[#E2E8F0] dark:border-slate-800 shrink-0">
+                <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-3 sm:hidden" />
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                      60-Second Checkout
+                    <h2 className="text-lg font-bold text-[#0F172A] dark:text-white">
+                      Express Checkout
                     </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Auto-filled from your campus profile
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                      1-screen hostel gate dispatch · ~16 min arrival
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setMobileDrawerOpen(false)}
-                    aria-label="Close checkout drawer"
+                    onClick={() => setCheckoutSheetOpen(false)}
+                    aria-label="Close checkout sheet"
                     className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                   >
                     <X className="w-5 h-5" />
@@ -815,7 +598,7 @@ export function EmergencyOrderView({
                 </div>
               </div>
 
-              <div className="overflow-y-auto p-4 pb-8">
+              <div className="overflow-y-auto p-5 pb-8">
                 <CheckoutForm
                   profile={profile}
                   cart={cart}
@@ -831,7 +614,7 @@ export function EmergencyOrderView({
                   onToggleWellnessPass={onToggleWellnessPass}
                   upiProvider={upiProvider}
                   onSelectUpi={onSelectUpi}
-                  onConfirmOrder={() => void handleMobileConfirm()}
+                  onConfirmOrder={() => void handleCheckoutConfirm()}
                   submitting={submitting}
                   formError={formError}
                   isDarkMode={isDarkMode}
@@ -841,7 +624,8 @@ export function EmergencyOrderView({
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Product Detail Modal */}
+
+      {/* Product Bottom Sheet Detail Drawer */}
       <AnimatePresence>
         {selectedDetailKit && (() => {
           const modalQty = getCartQty(selectedDetailKit.id);
@@ -850,27 +634,32 @@ export function EmergencyOrderView({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
               onClick={() => setSelectedDetailKit(null)}
-              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/65 backdrop-blur-xs p-0 sm:p-4"
+              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-950/50 backdrop-blur-xs p-0 sm:p-4"
               role="dialog"
               aria-modal="true"
               aria-label={`Product details for ${selectedDetailKit.name}`}
             >
               <motion.div
-                initial={shouldReduceMotion ? false : { y: 28, opacity: 0, scale: 0.98 }}
-                animate={{ y: 0, opacity: 1, scale: 1 }}
-                exit={shouldReduceMotion ? undefined : { y: 28, opacity: 0, scale: 0.98 }}
-                transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+                initial={shouldReduceMotion ? false : { y: '100%' }}
+                animate={{ y: 0 }}
+                exit={shouldReduceMotion ? undefined : { y: '100%' }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col shadow-2xl"
+                className="w-full max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 overflow-hidden flex flex-col shadow-2xl"
               >
-                <div className="relative w-full aspect-[4/3] min-h-36 bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 shrink-0">
+                <div className="pt-2.5 pb-1 bg-white dark:bg-slate-900 shrink-0 sm:hidden">
+                  <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto" />
+                </div>
+
+                <div className="relative w-full aspect-[4/3] bg-[#F8FAFC] dark:bg-slate-800 shrink-0 border-b border-slate-100 dark:border-slate-800">
                   <ProductPhoto product={selectedDetailKit} showSealBadge={true} />
                   <button
                     type="button"
                     onClick={() => setSelectedDetailKit(null)}
-                    aria-label="Close product detail modal"
-                    className="absolute top-3 right-3 min-h-[44px] min-w-[44px] rounded-2xl bg-slate-900/75 hover:bg-slate-900 text-white backdrop-blur-md border border-white/15 flex items-center justify-center shadow-md transition-colors"
+                    aria-label="Close product details"
+                    className="absolute top-3 right-3 min-h-[44px] min-w-[44px] rounded-xl bg-white/95 dark:bg-slate-900/90 hover:bg-white text-[#0F172A] dark:text-white border border-[#E2E8F0] dark:border-slate-700 flex items-center justify-center shadow-sm"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -879,114 +668,148 @@ export function EmergencyOrderView({
                 <div className="overflow-y-auto p-5 space-y-4">
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      {selectedDetailKit.skuCode && (
-                        <>
-                          <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
-                            {selectedDetailKit.skuCode}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                        </>
-                      )}
-                      <span className="font-semibold text-teal-700 dark:text-teal-400">
+                      <span className="font-semibold text-[#0D9488] dark:text-teal-400">
                         {selectedDetailKit.category}
                       </span>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono">{selectedDetailKit.sealedCode}</span>
+                      <span className="tabular-nums">
+                        {selectedDetailKit.etaMinutes} min delivery
+                      </span>
                       <span aria-hidden="true">·</span>
-                      <span className="tabular-nums">{selectedDetailKit.etaMinutes} min ETA</span>
+                      <span className="font-mono">{selectedDetailKit.sealedCode}</span>
                     </div>
 
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-snug">
+                      <h3 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-white leading-snug">
                         {selectedDetailKit.name}
                       </h3>
-                      <span className="text-xl font-bold font-mono tabular-nums text-teal-700 dark:text-teal-300 shrink-0">
+                      <span className="text-xl font-bold font-mono tabular-nums text-[#0F172A] dark:text-white shrink-0">
                         ₹{selectedDetailKit.price}
                       </span>
                     </div>
 
-                    {selectedDetailKit.subtitle && (
-                      <p className="text-xs font-medium text-teal-800 dark:text-teal-300 leading-snug">
-                        {selectedDetailKit.subtitle}
-                      </p>
-                    )}
-
-                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
                       {selectedDetailKit.reliefFor}
                     </p>
                   </div>
 
-                  <div className="rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 p-3.5 space-y-2">
-                    <p className="text-xs font-bold text-slate-900 dark:text-white">
-                      Sealed OTC Kit Contents
-                    </p>
+                  {/* Full Pack Contents */}
+                  <div className="rounded-2xl bg-[#F8FAFC] dark:bg-slate-800/70 border border-[#E2E8F0] dark:border-slate-800 p-4 space-y-2">
+                    <h4 className="text-sm font-bold text-[#0F172A] dark:text-white">
+                      Inside This Sealed Pack
+                    </h4>
                     <ul className="space-y-1.5">
                       {selectedDetailKit.contents.map((item) => (
                         <li
                           key={item}
-                          className="text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2"
+                          className="text-sm text-slate-700 dark:text-slate-300 flex items-start gap-2"
                         >
-                          <Check className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+                          <Check className="w-4 h-4 text-[#0D9488] dark:text-teal-400 shrink-0 mt-0.5" />
                           <span>{item}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
 
-                  <div className="pt-1 flex items-center justify-between gap-3">
-                    <span
-                      className={`text-xs font-semibold ${
-                        selectedDetailKit.inStock
-                          ? 'text-emerald-700 dark:text-emerald-400'
-                          : 'text-rose-700 dark:text-rose-400'
-                      }`}
-                    >
-                      {selectedDetailKit.inStock ? 'In Stock · Ready for Express Dispatch' : 'Currently Out of Stock'}
-                    </span>
+                  {/* Usage Instructions */}
+                  <div className="rounded-2xl bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 p-4 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-[#0F172A] dark:text-white">
+                      <Info className="w-4 h-4 text-[#0D9488] shrink-0" />
+                      <span>Usage Instructions</span>
+                    </div>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {getUsageGuidance(selectedDetailKit)}
+                    </p>
+                  </div>
 
-                    {!selectedDetailKit.inStock ? (
+                  {/* Safety & Doctor Reassurance */}
+                  <div className="flex items-start justify-between gap-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 p-3.5 text-xs sm:text-sm text-emerald-950 dark:text-emerald-100">
+                    <div className="flex items-start gap-2">
+                      <ShieldCheck className="w-4 h-4 text-[#0D9488] shrink-0 mt-0.5" />
+                      <span>
+                        Tamper-proof sealed OTC pack from licensed 24/7 pharmacy. Unsure about dosage?
+                      </span>
+                    </div>
+                    {onOpenConsultDoctor && (
                       <button
                         type="button"
-                        disabled
-                        className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 text-xs font-semibold cursor-not-allowed"
+                        onClick={() => {
+                          setSelectedDetailKit(null);
+                          onOpenConsultDoctor();
+                        }}
+                        className="font-bold text-[#0D9488] dark:text-teal-300 hover:underline whitespace-nowrap shrink-0 flex items-center gap-1"
                       >
-                        Out of Stock
+                        <Stethoscope className="w-3.5 h-3.5" />
+                        <span>Ask Doctor</span>
                       </button>
-                    ) : !isKitInCart(selectedDetailKit.id) || modalQty === 0 ? (
-                      <motion.button
-                        type="button"
-                        whileTap={shouldReduceMotion ? undefined : { scale: 0.95 }}
-                        onClick={() => triggerAddFeedback(selectedDetailKit)}
-                        aria-label={`Add ${selectedDetailKit.name} to cart`}
-                        className="min-h-[44px] px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-semibold border-b-[3px] border-teal-800 flex items-center gap-1.5 shrink-0"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Add · ₹{selectedDetailKit.price}</span>
-                      </motion.button>
-                    ) : (
-                      <div className="flex items-center gap-2">
+                    )}
+                  </div>
+                </div>
+
+                {/* Pinned Bottom Action Bar inside Product Detail Drawer */}
+                <div className="p-4 border-t border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 shrink-0">
+                  <div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      {selectedDetailKit.inStock ? 'In stock · Ready now' : 'Currently unavailable'}
+                    </div>
+                    <div className="text-lg font-bold font-mono tabular-nums text-[#0F172A] dark:text-white">
+                      ₹{selectedDetailKit.price}
+                    </div>
+                  </div>
+
+                  {!selectedDetailKit.inStock ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="min-h-[48px] px-5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 text-sm font-semibold cursor-not-allowed"
+                    >
+                      Out of Stock
+                    </button>
+                  ) : !isKitInCart(selectedDetailKit.id) || modalQty === 0 ? (
+                    <motion.button
+                      type="button"
+                      whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+                      onClick={() => onAddKit(selectedDetailKit)}
+                      className="min-h-[48px] px-6 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-sm sm:text-base font-bold flex items-center gap-1.5 whitespace-nowrap"
+                    >
+                      <Plus className="w-4 h-4 stroke-[2.5]" />
+                      <span>Add to Cart</span>
+                    </motion.button>
+                  ) : (
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center rounded-xl bg-[#0D9488] text-white overflow-hidden">
                         <button
                           type="button"
                           onClick={() => onUpdateQuantity(selectedDetailKit.id, -1)}
                           aria-label={`Remove one ${selectedDetailKit.name}`}
-                          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                          className="min-h-[48px] min-w-[44px] flex items-center justify-center hover:bg-teal-700"
                         >
-                          <Minus className="w-4 h-4" />
+                          <Minus className="w-4 h-4 stroke-[2.5]" />
                         </button>
-                        <span className="w-7 text-center text-sm font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+                        <span className="min-w-[28px] text-center text-base font-mono font-bold tabular-nums">
                           {modalQty}
                         </span>
                         <button
                           type="button"
-                          onClick={() => triggerAddFeedback(selectedDetailKit)}
+                          onClick={() => onAddKit(selectedDetailKit)}
                           aria-label={`Add one more ${selectedDetailKit.name}`}
-                          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-teal-600 text-white border-b-[3px] border-teal-800"
+                          className="min-h-[48px] min-w-[44px] flex items-center justify-center hover:bg-teal-700"
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-4 h-4 stroke-[2.5]" />
                         </button>
                       </div>
-                    )}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDetailKit(null);
+                          setCheckoutSheetOpen(true);
+                        }}
+                        className="min-h-[48px] px-4 rounded-xl bg-[#0F172A] dark:bg-white text-white dark:text-[#0F172A] text-sm font-bold whitespace-nowrap"
+                      >
+                        Checkout
+                      </button>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </motion.div>

@@ -16,17 +16,17 @@ import {
   Bell,
   BellOff,
   BellRing,
+  Clock,
   Cross,
-  History,
+  Home,
   LogOut,
   MapPin,
   Moon,
-  PackagePlus,
   Shield,
   Stethoscope,
   Store,
   Sun,
-  UserCheck,
+  User as UserIcon,
   UserCog,
 } from 'lucide-react';
 import {
@@ -84,7 +84,7 @@ const THEME_STORAGE_KEY = 'qcc_theme_pref_v2';
 const CART_STORAGE_KEY = 'qcc_cart_v1';
 const LEGACY_CART_KEYS = ['cart', 'qcc_cart', 'quickcare_cart', 'qcc_demo_cart_v1'];
 
-type CustomerTab = 'order' | 'doctor' | 'tracker' | 'history' | 'profile';
+type CustomerTab = 'order' | 'doctor' | 'tracker' | 'account';
 
 function readStorageJson<T>(key: string, fallback: T): T {
   try {
@@ -466,6 +466,7 @@ export default function App() {
     return param || null;
   });
   const [activeTab, setActiveTab] = useState<CustomerTab>('order');
+  const [autoOpenCheckout, setAutoOpenCheckout] = useState(false);
   const [roleMode, setRoleMode] = useState<UserRoleMode>('student');
 
   // OTC Kits Catalog (synced with Firestore `kits` collection or Demo storage)
@@ -1028,7 +1029,10 @@ export default function App() {
       const found = orders.find((o) => o.id === selectedOrderId);
       if (found) return found;
     }
-    return orders.find((o) => o.status !== 'delivered' && o.status !== 'cancelled') ?? orders[0];
+    return (
+      orders.find((o) => o.status !== 'delivered' && o.status !== 'cancelled') ??
+      null
+    );
   }, [orders, selectedOrderId]);
 
   const lastCompletedOrder = useMemo(() => {
@@ -1679,153 +1683,70 @@ export default function App() {
     const activeCount = orders.filter(
       (o) => o.status !== 'delivered' && o.status !== 'cancelled'
     ).length;
-    const completedCount = orders.filter((o) => o.status === 'delivered').length;
     const openConsultCount = consultations.filter(
       (c) => c.status !== 'completed'
     ).length;
 
     return (
-      <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-        {/* Frosted Glassmorphism Student Top Header with Live Night Curfew Pulse Indicator */}
-        <header className="sticky top-0 z-30 h-14 bg-white/80 dark:bg-slate-950/85 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-800/80 shadow-[0_6px_20px_-10px_rgba(15,23,42,0.12)] dark:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.65)]">
-          <div className="max-w-5xl mx-auto h-full px-4 flex items-center justify-between gap-2 sm:gap-3">
-            <div className="flex items-center gap-2 min-w-0">
+      <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-slate-950 text-[#0F172A] dark:text-slate-100">
+        {/* Compact Sticky Top Bar: Hostel Gate Pin + Change Pin + 16 Min Delivery Pill */}
+        <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-[#E2E8F0] dark:border-slate-800">
+          <div className="max-w-6xl mx-auto min-h-[60px] px-4 py-2 flex items-center justify-between gap-3">
+            {/* Saved Hostel Gate Location with One-Tap Change Pin */}
+            <div className="flex items-center gap-2.5 min-w-0">
               <button
                 type="button"
-                onClick={() => setActiveTab('order')}
-                className="flex items-center gap-2 text-left whitespace-nowrap shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-teal-600"
+                onClick={() => setEditingProfile(true)}
+                aria-label="Change saved hostel gate pin"
+                className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-[#0D9488] dark:text-teal-300 flex items-center justify-center shrink-0 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488]"
               >
-                <div className="w-8 h-8 rounded-xl bg-teal-600 border-b-2 border-teal-800 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <Cross className="w-4 h-4 stroke-[2.5]" />
-                </div>
-                <span className="text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white">
-                  Quick Care Campus
-                </span>
+                <MapPin className="w-5 h-5" />
               </button>
-
-              {/* Live Night Curfew Pulse Indicator */}
-              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 shrink-0">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                </span>
-                <span>{curfewTelemetry.pillLabel}</span>
-              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm sm:text-base font-bold text-[#0F172A] dark:text-white truncate">
+                    {profile.hostelName}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingProfile(true)}
+                    className="text-xs font-semibold text-[#0D9488] dark:text-teal-300 hover:underline whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-[#0D9488] rounded"
+                  >
+                    Change Pin
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  Quick Care Campus · Room {profile.roomNumber}
+                </p>
+              </div>
             </div>
 
-            <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 truncate max-w-[220px]">
-              <MapPin className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400 shrink-0" />
-              <span className="truncate font-medium">
-                {profile.hostelName} · Room {profile.roomNumber}
+            {/* 16 Min Delivery Green Pill + Subtle Theme Toggle */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span>16 Min Delivery</span>
               </span>
-            </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <motion.button
+              <button
                 type="button"
-                whileTap={reduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => void handleRequestBrowserNotifications()}
-                aria-label={
-                  browserNotifStatus === 'granted'
-                    ? 'Browser push notifications enabled'
-                    : browserNotifStatus === 'denied'
-                    ? 'Browser notifications blocked; using in-app toast alerts'
-                    : 'Enable browser order status notifications'
-                }
-                title={
-                  browserNotifStatus === 'granted'
-                    ? 'Browser Push Alerts On'
-                    : browserNotifStatus === 'denied'
-                    ? 'Browser alerts blocked — in-app toast alerts active'
-                    : 'Enable Browser Push Alerts'
-                }
-                className={`min-h-[38px] min-w-[38px] rounded-xl border border-b-[3px] flex items-center justify-center transition-all ${
-                  browserNotifStatus === 'granted'
-                    ? 'border-teal-200 dark:border-teal-700 border-b-teal-300 dark:border-b-teal-900 bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300'
-                    : 'border-slate-200 dark:border-slate-700 border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
-                }`}
-              >
-                {browserNotifStatus === 'granted' ? (
-                  <BellRing className="w-4 h-4" />
-                ) : browserNotifStatus === 'denied' || browserNotifStatus === 'unsupported' ? (
-                  <BellOff className="w-4 h-4 text-slate-400" />
-                ) : (
-                  <Bell className="w-4 h-4" />
-                )}
-              </motion.button>
-
-              <motion.button
-                type="button"
-                whileTap={reduceMotion ? undefined : { scale: 0.9 }}
                 onClick={toggleTheme}
-                aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Night Curfew Dark Mode'}
-                title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                className="min-h-[38px] min-w-[38px] rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all"
+                aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
+                className="min-h-[44px] min-w-[44px] rounded-xl border border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-[#0D9488] flex items-center justify-center transition-colors"
               >
                 {isDarkMode ? (
                   <Sun className="w-4 h-4 text-amber-400" />
                 ) : (
-                  <Moon className="w-4 h-4 text-teal-700" />
+                  <Moon className="w-4 h-4 text-slate-600" />
                 )}
-              </motion.button>
-
-              <motion.button
-                type="button"
-                whileTap={reduceMotion ? undefined : { scale: 0.95 }}
-                onClick={() => setRoleMode('admin')}
-                className="min-h-[38px] px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:border-slate-900 dark:hover:border-teal-500 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1 whitespace-nowrap transition-all"
-              >
-                <Shield className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
-                <span className="hidden xs:inline sm:inline">Admin Ops</span>
-              </motion.button>
-
-              <motion.button
-                type="button"
-                whileTap={reduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => setEditingProfile(true)}
-                aria-label="Edit campus profile"
-                className="min-h-[38px] min-w-[38px] rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all"
-              >
-                <UserCog className="w-4 h-4" />
-              </motion.button>
-
-              <motion.button
-                type="button"
-                whileTap={reduceMotion ? undefined : { scale: 0.9 }}
-                onClick={() => void handleSignOut()}
-                aria-label="Sign out"
-                className="min-h-[38px] min-w-[38px] rounded-xl border border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-700 dark:hover:text-rose-400 text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all"
-              >
-                <LogOut className="w-4 h-4" />
-              </motion.button>
+              </button>
             </div>
           </div>
         </header>
 
         {/* Main Student Workspace */}
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-4 pb-28 sm:pb-24 space-y-5">
-          {/* Curfew Express Status Bar */}
-          <div className="rounded-2xl bg-white dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm shadow-xs">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium leading-relaxed">
-              <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 font-semibold">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                </span>
-                <span>Curfew Express ({curfewTelemetry.subLabel})</span>
-              </span>
-              <span className="text-slate-400 dark:text-slate-500">•</span>
-              <span className="text-teal-700 dark:text-teal-300 font-semibold">Delivery in ~16 mins</span>
-              <span className="text-slate-400 dark:text-slate-500 hidden sm:inline">•</span>
-              <span className="hidden sm:inline text-slate-600 dark:text-slate-300">
-                Pin: {profile.hostelName}
-              </span>
-            </div>
-            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-300">
-              {profile.phone}
-            </span>
-          </div>
-
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 pt-5 pb-36 sm:pb-36 space-y-6">
           {activeTab === 'order' && (
             <EmergencyOrderView
               kits={kits}
@@ -1856,6 +1777,8 @@ export default function App() {
                 setActiveTab('doctor');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
+              autoOpenCheckout={autoOpenCheckout}
+              onAutoOpenCheckoutHandled={() => setAutoOpenCheckout(false)}
             />
           )}
 
@@ -1868,6 +1791,7 @@ export default function App() {
               onUpdateConsultation={handleUpdateConsultation}
               onAddRecommendedToCart={handleAddRecommendedKitsToCart}
               onGoToStorefrontCheckout={() => {
+                setAutoOpenCheckout(true);
                 setActiveTab('order');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
@@ -1885,140 +1809,179 @@ export default function App() {
               onSubmitFeedback={handleSubmitFeedback}
               isDemoMode={isDemoMode}
               onDemoUpdateOrder={handleDemoUpdateOrder}
-              onGoToOrder={() => setActiveTab('order')}
+              onGoToOrder={() => {
+                setActiveTab('order');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
               isDarkMode={isDarkMode}
               browserNotifStatus={browserNotifStatus}
               onRequestBrowserNotifications={handleRequestBrowserNotifications}
             />
           )}
 
-          {activeTab === 'history' && (
-            <OrderHistoryView
-              orders={orders}
-              feedbackList={feedbackList}
-              kits={kits}
-              onReorderKits={handleReorderKits}
-              onOpenInTracker={(orderId) => {
-                setSelectedOrderId(orderId);
-                setActiveTab('tracker');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              onGoToOrder={() => {
-                setActiveTab('order');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              onPublishShareTracker={handlePublishShareTracker}
-              onPreviewSharedLink={openSharedTrackPreview}
-              onCancelOrder={handleCancelOrder}
-            />
-          )}
-
-          {activeTab === 'profile' && (
-            <section
-              aria-label="Student campus profile and wellness settings"
-              className="max-w-2xl mx-auto rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-sm space-y-5"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center font-bold text-base shrink-0">
-                    {profile.displayName.slice(0, 2).toUpperCase()}
+          {activeTab === 'account' && (
+            <div className="space-y-6">
+              {/* Student Profile, Hostel Gate Pin & Semester Wellness Pass */}
+              <section
+                aria-label="Account details, Hostel Gate Pin, and Semester Pass"
+                className="rounded-2xl border border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 space-y-5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-12 h-12 rounded-2xl bg-[#0D9488] text-white flex items-center justify-center font-bold text-base shrink-0">
+                      {profile.displayName.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h1 className="text-lg sm:text-xl font-bold text-[#0F172A] dark:text-white truncate">
+                        {profile.displayName}
+                      </h1>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 font-mono truncate">
+                        {profile.phone} · {profile.email || 'Campus Member'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h1 className="text-lg font-bold text-slate-900 dark:text-white">
-                      {profile.displayName}
-                    </h1>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                      {profile.phone} · {profile.email || 'Campus Member'}
-                    </p>
-                  </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => setEditingProfile(true)}
-                  className="min-h-[44px] px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap"
-                >
-                  <UserCog className="w-4 h-4" />
-                  <span>Edit Hostel &amp; Gate Pin</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3.5 space-y-1">
-                  <div className="text-slate-500 dark:text-slate-400">Hostel &amp; Room</div>
-                  <div className="text-sm font-bold text-slate-900 dark:text-white">
-                    {profile.hostelName} · Room {profile.roomNumber}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3.5 space-y-1">
-                  <div className="text-slate-500 dark:text-slate-400">Semester Wellness Pass</div>
-                  <div
-                    className={`text-sm font-bold ${
-                      profile.wellnessPassActive
-                        ? 'text-emerald-700 dark:text-emerald-400'
-                        : 'text-slate-700 dark:text-slate-300'
-                    }`}
+                  <button
+                    type="button"
+                    onClick={() => setEditingProfile(true)}
+                    className="min-h-[44px] px-4 py-2 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-colors"
                   >
-                    {profile.wellnessPassActive
-                      ? 'Active (₹0 Gate Delivery · ₹49 Doctor Consults)'
-                      : 'Inactive (₹60 Gate Delivery · ₹99 Consults)'}
-                  </div>
+                    <UserCog className="w-4 h-4" />
+                    <span>Change Gate Pin</span>
+                  </button>
                 </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3.5 space-y-1">
-                  <div className="text-slate-500 dark:text-slate-400">Handover Gate Pin GPS</div>
-                  <div className="text-sm font-mono font-bold text-slate-900 dark:text-white tabular-nums">
-                    {profile.gateLat.toFixed(5)}, {profile.gateLng.toFixed(5)}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 p-3.5 space-y-1">
-                  <div className="text-slate-500 dark:text-slate-400">Emergency Contact</div>
-                  <div className="text-sm font-bold text-slate-900 dark:text-white">
-                    {profile.emergencyContactName}
-                  </div>
-                </div>
-              </div>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleRequestBrowserNotifications()}
-                  className="min-h-[42px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-teal-500 flex items-center gap-1.5"
-                >
-                  <Bell className="w-4 h-4 text-teal-600" />
-                  <span>
-                    {browserNotifStatus === 'granted'
-                      ? 'Push Alerts Enabled'
-                      : 'Enable Push Notifications'}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSignOut()}
-                  className="min-h-[42px] px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-1.5"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-            </section>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  <div className="rounded-xl bg-[#F8FAFC] dark:bg-slate-800/70 border border-[#E2E8F0] dark:border-slate-800 p-4 space-y-1">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Hostel &amp; Room
+                    </div>
+                    <div className="text-sm sm:text-base font-bold text-[#0F172A] dark:text-white">
+                      {profile.hostelName} · Rm {profile.roomNumber}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-[#F8FAFC] dark:bg-slate-800/70 border border-[#E2E8F0] dark:border-slate-800 p-4 space-y-1">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Semester Wellness Pass
+                    </div>
+                    <div
+                      className={`text-sm sm:text-base font-bold ${
+                        profile.wellnessPassActive
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-[#0F172A] dark:text-slate-200'
+                      }`}
+                    >
+                      {profile.wellnessPassActive
+                        ? 'Active · ₹0 Delivery & 50% Off Doctors'
+                        : 'Inactive · ₹60 Delivery Fee'}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-[#F8FAFC] dark:bg-slate-800/70 border border-[#E2E8F0] dark:border-slate-800 p-4 space-y-1">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Saved Gate Pin GPS
+                    </div>
+                    <div className="text-sm sm:text-base font-mono font-bold text-[#0F172A] dark:text-white tabular-nums">
+                      {profile.gateLat.toFixed(5)}, {profile.gateLng.toFixed(5)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-[#F8FAFC] dark:bg-slate-800/70 border border-[#E2E8F0] dark:border-slate-800 p-4 space-y-1">
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Emergency Contact
+                    </div>
+                    <div className="text-sm sm:text-base font-bold text-[#0F172A] dark:text-white">
+                      {profile.emergencyContactName}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Account Actions: Alerts, Admin Ops Dashboard, Sign Out */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => void handleRequestBrowserNotifications()}
+                      className="min-h-[44px] px-4 py-2 rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-[#0D9488] text-sm font-semibold text-[#0F172A] dark:text-slate-100 flex items-center gap-2 transition-colors"
+                    >
+                      {browserNotifStatus === 'granted' ? (
+                        <BellRing className="w-4 h-4 text-[#0D9488]" />
+                      ) : browserNotifStatus === 'denied' ||
+                        browserNotifStatus === 'unsupported' ? (
+                        <BellOff className="w-4 h-4 text-slate-400" />
+                      ) : (
+                        <Bell className="w-4 h-4 text-[#0D9488]" />
+                      )}
+                      <span>
+                        {browserNotifStatus === 'granted'
+                          ? 'Order Alerts Active'
+                          : 'Enable Order Alerts'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRoleMode('admin')}
+                      className="min-h-[44px] px-4 py-2 rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-[#0D9488] text-sm font-semibold text-[#0F172A] dark:text-slate-100 flex items-center gap-2 transition-colors"
+                    >
+                      <Shield className="w-4 h-4 text-[#0D9488]" />
+                      <span>Admin &amp; Runner Dashboard</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleSignOut()}
+                    className="min-h-[44px] px-4 py-2 rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-sm font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </section>
+
+              {/* Full Order History with Active / Delivered / Cancelled Filters */}
+              <OrderHistoryView
+                orders={orders}
+                feedbackList={feedbackList}
+                kits={kits}
+                onReorderKits={handleReorderKits}
+                onOpenInTracker={(orderId) => {
+                  setSelectedOrderId(orderId);
+                  setActiveTab('tracker');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onGoToOrder={() => {
+                  setActiveTab('order');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onPublishShareTracker={handlePublishShareTracker}
+                onPreviewSharedLink={openSharedTrackPreview}
+                onCancelOrder={handleCancelOrder}
+              />
+            </div>
           )}
         </main>
 
-        {/* Fixed Frosted Glassmorphism 5-Tab Student Bottom Navigation Bar with Sliding Active Pill */}
+        {/* Simplified Thumb-Friendly 4-Tab Fixed Bottom Navigation Bar */}
         <nav
-          aria-label="Customer storefront navigation"
-          className="fixed bottom-0 left-0 right-0 z-40 bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 shadow-[0_-8px_24px_-12px_rgba(15,23,42,0.14)] dark:shadow-[0_-12px_32px_-12px_rgba(0,0,0,0.65)]"
+          aria-label="Primary student navigation"
+          className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-[#E2E8F0] dark:border-slate-800"
         >
           <LayoutGroup id="student-bottom-nav">
-            <div className="max-w-5xl mx-auto grid grid-cols-5 h-16 px-1 sm:px-3 py-1.5 gap-1 sm:gap-2">
+            <div className="max-w-4xl mx-auto grid grid-cols-4 h-[68px] px-2 py-1.5 gap-1">
               <button
                 type="button"
-                onClick={() => setActiveTab('order')}
+                onClick={() => {
+                  setActiveTab('order');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
                 aria-current={activeTab === 'order' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`relative min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
                   activeTab === 'order'
-                    ? 'text-teal-700 dark:text-teal-300'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'text-[#0D9488] dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
                 }`}
               >
                 {activeTab === 'order' && (
@@ -2027,26 +1990,29 @@ export default function App() {
                     transition={
                       reduceMotion
                         ? { duration: 0 }
-                        : { type: 'spring', stiffness: 420, damping: 34 }
+                        : { type: 'spring', stiffness: 450, damping: 36 }
                     }
-                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                    className="absolute inset-0 rounded-xl bg-teal-50 dark:bg-teal-950/60"
                   />
                 )}
-                <PackagePlus className="relative z-10 w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Storefront
+                <Home className="relative z-10 w-5 h-5" />
+                <span className="relative z-10 text-[11px] sm:text-xs font-bold tracking-tight whitespace-nowrap">
+                  Home / Kits
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setActiveTab('doctor')}
-                aria-label="Consult Doctor"
+                onClick={() => {
+                  setActiveTab('doctor');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                aria-label="Doctors 24/7"
                 aria-current={activeTab === 'doctor' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`relative min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
                   activeTab === 'doctor'
-                    ? 'text-teal-700 dark:text-teal-300'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'text-[#0D9488] dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
                 }`}
               >
                 {activeTab === 'doctor' && (
@@ -2055,33 +2021,37 @@ export default function App() {
                     transition={
                       reduceMotion
                         ? { duration: 0 }
-                        : { type: 'spring', stiffness: 420, damping: 34 }
+                        : { type: 'spring', stiffness: 450, damping: 36 }
                     }
-                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                    className="absolute inset-0 rounded-xl bg-teal-50 dark:bg-teal-950/60"
                   />
                 )}
                 <div className="relative z-10">
-                  <Stethoscope className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <Stethoscope className="w-5 h-5" />
                   {openConsultCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] rounded-full bg-teal-600 text-white text-[9px] font-mono font-bold flex items-center justify-center px-1 tabular-nums">
+                    <span className="absolute -top-1 -right-2 min-w-[16px] h-[16px] rounded-full bg-[#0D9488] text-white text-[10px] font-mono font-bold flex items-center justify-center px-1 tabular-nums">
                       {openConsultCount}
                     </span>
                   )}
                 </div>
-                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Consult Dr
+                <span className="relative z-10 text-[11px] sm:text-xs font-bold tracking-tight whitespace-nowrap">
+                  Doctors (24/7)
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setActiveTab('tracker')}
-                aria-label="Live Tracker"
+                onClick={() => {
+                  setSelectedOrderId(null);
+                  setActiveTab('tracker');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                aria-label="Live Track"
                 aria-current={activeTab === 'tracker' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`relative min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
                   activeTab === 'tracker'
-                    ? 'text-teal-700 dark:text-teal-300'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'text-[#0D9488] dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
                 }`}
               >
                 {activeTab === 'tracker' && (
@@ -2090,94 +2060,53 @@ export default function App() {
                     transition={
                       reduceMotion
                         ? { duration: 0 }
-                        : { type: 'spring', stiffness: 420, damping: 34 }
+                        : { type: 'spring', stiffness: 450, damping: 36 }
                     }
-                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                    className="absolute inset-0 rounded-xl bg-teal-50 dark:bg-teal-950/60"
                   />
                 )}
                 <div className="relative z-10">
-                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <MapPin className="w-5 h-5" />
                   {activeCount > 0 && (
-                    <motion.span
-                      key={activeCount}
-                      initial={reduceMotion ? false : { scale: 1.4 }}
-                      animate={reduceMotion ? undefined : { scale: 1 }}
-                      className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] rounded-full bg-teal-600 text-white text-[9px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
-                    >
-                      {activeCount}
-                    </motion.span>
+                    <span
+                      aria-label={`${activeCount} active delivery`}
+                      className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-950"
+                    />
                   )}
                 </div>
-                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Tracker
+                <span className="relative z-10 text-[11px] sm:text-xs font-bold tracking-tight whitespace-nowrap">
+                  Live Track
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setActiveTab('history')}
-                aria-label="Order History"
-                aria-current={activeTab === 'history' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
-                  activeTab === 'history'
-                    ? 'text-teal-700 dark:text-teal-300'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                onClick={() => {
+                  setActiveTab('account');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                aria-label="Account"
+                aria-current={activeTab === 'account' ? 'page' : undefined}
+                className={`relative min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
+                  activeTab === 'account'
+                    ? 'text-[#0D9488] dark:text-teal-300'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
                 }`}
               >
-                {activeTab === 'history' && (
+                {activeTab === 'account' && (
                   <motion.span
                     layoutId="student-nav-pill"
                     transition={
                       reduceMotion
                         ? { duration: 0 }
-                        : { type: 'spring', stiffness: 420, damping: 34 }
+                        : { type: 'spring', stiffness: 450, damping: 36 }
                     }
-                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
+                    className="absolute inset-0 rounded-xl bg-teal-50 dark:bg-teal-950/60"
                   />
                 )}
-                <div className="relative z-10">
-                  <History className="w-4 h-4 sm:w-5 sm:h-5" />
-                  {completedCount > 0 && (
-                    <motion.span
-                      key={completedCount}
-                      initial={reduceMotion ? false : { scale: 1.3 }}
-                      animate={reduceMotion ? undefined : { scale: 1 }}
-                      className="absolute -top-1.5 -right-2 min-w-[15px] h-[15px] rounded-full bg-emerald-600 text-white text-[9px] font-mono font-bold flex items-center justify-center px-1 tabular-nums"
-                    >
-                      {completedCount}
-                    </motion.span>
-                  )}
-                </div>
-                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Orders
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('profile')}
-                aria-label="Student Profile"
-                aria-current={activeTab === 'profile' ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 ${
-                  activeTab === 'profile'
-                    ? 'text-teal-700 dark:text-teal-300'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {activeTab === 'profile' && (
-                  <motion.span
-                    layoutId="student-nav-pill"
-                    transition={
-                      reduceMotion
-                        ? { duration: 0 }
-                        : { type: 'spring', stiffness: 420, damping: 34 }
-                    }
-                    className="absolute inset-0 rounded-2xl bg-teal-500/12 dark:bg-teal-500/20 border border-teal-500/30 dark:border-teal-400/30 shadow-xs"
-                  />
-                )}
-                <UserCheck className="relative z-10 w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="relative z-10 text-[10px] sm:text-xs font-semibold tracking-tight whitespace-nowrap">
-                  Profile
+                <UserIcon className="relative z-10 w-5 h-5" />
+                <span className="relative z-10 text-[11px] sm:text-xs font-bold tracking-tight whitespace-nowrap">
+                  Account
                 </span>
               </button>
             </div>

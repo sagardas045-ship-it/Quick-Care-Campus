@@ -23,18 +23,19 @@ import {
   Video,
 } from 'lucide-react';
 import {
-  CONSULTATION_FEE,
+  DOCTOR_SPECIALTY_FILTERS,
   DURATION_OPTIONS,
+  findBestMatchedDoctor,
   getDoctorById,
   ON_CALL_DOCTORS,
   TRIAGE_SYMPTOM_CHIPS,
-  WELLNESS_PASS_CONSULT_FEE,
 } from '../data/doctorsData';
 import type {
   CampusConsultation,
   ConsultationMessage,
   DigitalPrescription,
   DoctorProfile,
+  DoctorSpecialtyFilter,
   ReliefKit,
   StudentProfile,
   UpiProvider,
@@ -103,6 +104,8 @@ export function ConsultDoctorView({
   );
 
   // Triage & Booking State
+  const [specialtyFilter, setSpecialtyFilter] =
+    useState<DoctorSpecialtyFilter>('All Doctors');
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>(
     ON_CALL_DOCTORS[0].id
   );
@@ -163,11 +166,43 @@ export function ConsultDoctorView({
     }
   }, [activeConsultation?.messages.length]);
 
-  const effectiveFee = profile.wellnessPassActive
-    ? WELLNESS_PASS_CONSULT_FEE
-    : CONSULTATION_FEE;
-
   const selectedDoctor: DoctorProfile = getDoctorById(selectedDoctorId);
+
+  const effectiveFee = profile.wellnessPassActive
+    ? selectedDoctor.passFee
+    : selectedDoctor.baseFee;
+
+  const bestMatch = useMemo(
+    () => findBestMatchedDoctor(selectedSymptoms),
+    [selectedSymptoms]
+  );
+
+  const visibleDoctors = useMemo(() => {
+    const base =
+      specialtyFilter === 'All Doctors'
+        ? ON_CALL_DOCTORS
+        : ON_CALL_DOCTORS.filter((doc) => doc.specialtyCategory === specialtyFilter);
+    if (!bestMatch.matchedSymptom) return base;
+    return [...base].sort((a, b) => {
+      if (a.id === bestMatch.doctor.id) return -1;
+      if (b.id === bestMatch.doctor.id) return 1;
+      return 0;
+    });
+  }, [specialtyFilter, bestMatch]);
+
+  const handleSelectSpecialtyFilter = (filter: DoctorSpecialtyFilter) => {
+    setSpecialtyFilter(filter);
+    if (filter === 'All Doctors') return;
+    const matchingDocs = ON_CALL_DOCTORS.filter(
+      (doc) => doc.specialtyCategory === filter
+    );
+    if (
+      matchingDocs.length > 0 &&
+      !matchingDocs.some((doc) => doc.id === selectedDoctorId)
+    ) {
+      setSelectedDoctorId(matchingDocs[0].id);
+    }
+  };
 
   const toggleSymptom = (symptom: string) => {
     setTriageError(null);
@@ -178,12 +213,15 @@ export function ConsultDoctorView({
         : [...prev, symptom].slice(0, 10);
 
       if (!doctorPinnedByUser && next.length > 0) {
-        const latest = next[next.length - 1];
-        const suggested = ON_CALL_DOCTORS.find((doc) =>
-          doc.recommendedSymptomMatches.includes(latest)
-        );
-        if (suggested) {
-          setSelectedDoctorId(suggested.id);
+        const match = findBestMatchedDoctor(next);
+        if (match.matchedSymptom) {
+          setSelectedDoctorId(match.doctor.id);
+          if (
+            specialtyFilter !== 'All Doctors' &&
+            match.doctor.specialtyCategory !== specialtyFilter
+          ) {
+            setSpecialtyFilter('All Doctors');
+          }
         }
       }
       return next;
@@ -407,19 +445,19 @@ export function ConsultDoctorView({
       {/* Teleconsultation Clinical Header & Session Switcher */}
       <section
         aria-label="24/7 On-Call MBBS Teleconsultation Header"
-        className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 shadow-[0_12px_30px_-16px_rgba(15,23,42,0.12)] space-y-4"
+        className="rounded-2xl bg-white dark:bg-slate-900 border border-[#E2E8F0] dark:border-slate-800 p-5 sm:p-6 space-y-4"
       >
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-2 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 px-3 py-1 text-xs font-semibold text-teal-800 dark:text-teal-200">
-              <Stethoscope className="w-3.5 h-3.5 text-teal-700 dark:text-teal-300" />
-              <span>24/7 Curfew Telehealth Desk · 10:00 PM – 6:00 AM</span>
+            <div className="flex items-center gap-2 text-xs font-semibold text-[#0D9488] dark:text-teal-300">
+              <Stethoscope className="w-4 h-4 shrink-0" />
+              <span>24/7 Curfew Telehealth · 10:00 PM – 6:00 AM</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-              Consult an On-Call MBBS Doctor
+            <h1 className="text-xl sm:text-2xl font-bold text-[#0F172A] dark:text-white tracking-tight">
+              Consult an On-Call Specialist
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-2xl">
-              NMC-registered night duty physicians respond in ~2 minutes with safe dosage checks, HD video/voice consults, and one-tap OTC kits delivered to {profile.hostelName}.
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
+              {ON_CALL_DOCTORS.length} NMC &amp; DDC-registered night doctors respond in ~2–3 mins with dosage safety checks, video/voice consults, and one-tap OTC kits to {profile.hostelName}.
             </p>
           </div>
 
@@ -427,22 +465,22 @@ export function ConsultDoctorView({
             {consultations.length > 0 && !composerMode && (
               <motion.button
                 type="button"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+                whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }}
                 onClick={() => {
                   setCallMode('none');
                   setComposerMode(true);
                 }}
-                className="min-h-[44px] px-4 py-2 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white text-xs sm:text-sm font-semibold border-b-[3px] border-teal-800 flex items-center gap-1.5 whitespace-nowrap"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                <span>New Doctor Consult</span>
+                <span>New Consult</span>
               </motion.button>
             )}
             {composerMode && consultations.length > 0 && (
               <button
                 type="button"
                 onClick={() => setComposerMode(false)}
-                className="min-h-[44px] px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 hover:border-teal-500 whitespace-nowrap"
+                className="min-h-[44px] px-4 py-2 rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-[#F8FAFC] dark:bg-slate-800 text-sm font-semibold text-[#0F172A] dark:text-slate-100 hover:border-[#0D9488] whitespace-nowrap transition-colors"
               >
                 Resume Active Session ({consultations.length})
               </button>
@@ -494,21 +532,55 @@ export function ConsultDoctorView({
       {(composerMode || !activeConsultation) && (
         <div className="space-y-6">
           {/* 1. On-Call Night Physicians Roster */}
-          <section aria-label="On-call curfew physicians" className="space-y-3">
+          <section aria-label="On-call curfew physicians" className="space-y-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                1. Choose Your On-Call Night Physician
+                1. Choose Your On-Call Night Specialist ({visibleDoctors.length})
               </h2>
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 {profile.wellnessPassActive
-                  ? 'Wellness Pass Discount Applied: ₹49/consult (50% off)'
-                  : 'Standard Curfew Consult: ₹99 · Pass Holders ₹49'}
+                  ? 'Wellness Pass Discount Active (50% Off · ₹39–₹59)'
+                  : 'Curfew Consults ₹79–₹119 · Pass Holders ₹39–₹59'}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {ON_CALL_DOCTORS.map((doctor) => {
+            {/* Horizontal Scrollable Specialty Filter Chips */}
+            <div
+              role="tablist"
+              aria-label="Filter night doctors by specialty"
+              className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1"
+            >
+              {DOCTOR_SPECIALTY_FILTERS.map((filter) => {
+                const isActive = specialtyFilter === filter;
+                const label =
+                  filter === 'All Doctors'
+                    ? `All Doctors (${ON_CALL_DOCTORS.length})`
+                    : filter;
+                return (
+                  <button
+                    key={filter}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => handleSelectSpecialtyFilter(filter)}
+                    className={`min-h-[40px] px-3.5 py-1.5 rounded-2xl border text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                      isActive
+                        ? 'bg-slate-900 dark:bg-teal-600 text-white border-slate-900 dark:border-teal-500 shadow-xs'
+                        : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-teal-500'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {visibleDoctors.map((doctor) => {
                 const isSelected = selectedDoctorId === doctor.id;
+                const isBestMatch =
+                  Boolean(bestMatch.matchedSymptom) &&
+                  bestMatch.doctor.id === doctor.id;
                 const displayFee = profile.wellnessPassActive
                   ? doctor.passFee
                   : doctor.baseFee;
@@ -521,13 +593,22 @@ export function ConsultDoctorView({
                       setSelectedDoctorId(doctor.id);
                       setDoctorPinnedByUser(true);
                     }}
-                    className={`text-left rounded-3xl border border-b-[4px] p-4 flex flex-col justify-between gap-3 transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                    className={`text-left rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
                       isSelected
-                        ? 'border-teal-600 border-b-teal-700 bg-teal-50/45 dark:bg-teal-950/35 shadow-[0_14px_30px_-14px_rgba(13,148,136,0.28)]'
-                        : 'border-slate-200 dark:border-slate-800 border-b-slate-300 dark:border-b-slate-900 bg-white dark:bg-slate-900 hover:border-teal-400'
+                        ? 'border-[#0D9488] bg-teal-50/50 dark:bg-teal-950/35 ring-1 ring-[#0D9488]/30'
+                        : isBestMatch
+                        ? 'border-teal-300 dark:border-teal-700 bg-white dark:bg-slate-900 hover:border-[#0D9488]'
+                        : 'border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-teal-400'
                     }`}
                   >
                     <div className="space-y-3">
+                      {isBestMatch && (
+                        <div className="inline-flex items-center gap-1.5 rounded-lg bg-teal-100/90 dark:bg-teal-900/60 border border-teal-300 dark:border-teal-700 px-2 py-0.5 text-[11px] font-bold text-teal-900 dark:text-teal-200">
+                          <Sparkles className="w-3 h-3 text-teal-700 dark:text-teal-300" />
+                          <span>Best Match for Your Symptom</span>
+                        </div>
+                      )}
+
                       <div className="flex items-start gap-3">
                         <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0">
                           <img
@@ -553,7 +634,7 @@ export function ConsultDoctorView({
                             )}
                           </div>
                           <p className="text-xs font-semibold text-teal-700 dark:text-teal-300">
-                            {doctor.qualification}
+                            {doctor.qualification} · {doctor.experienceYears} yrs exp
                           </p>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                             {doctor.nmcReg}
@@ -640,6 +721,27 @@ export function ConsultDoctorView({
                   );
                 })}
               </div>
+
+              {bestMatch.matchedSymptom && bestMatch.doctor.id !== selectedDoctorId && (
+                <div className="rounded-2xl border border-teal-200 dark:border-teal-800 bg-teal-50/70 dark:bg-teal-950/40 px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-teal-950 dark:text-teal-100">
+                    Recommended specialist for{' '}
+                    <strong>{bestMatch.matchedSymptom}</strong>:{' '}
+                    <strong>{bestMatch.doctor.name}</strong> ({bestMatch.doctor.specialtyCategory})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDoctorId(bestMatch.doctor.id);
+                      setDoctorPinnedByUser(false);
+                      setSpecialtyFilter('All Doctors');
+                    }}
+                    className="min-h-[34px] px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-semibold whitespace-nowrap"
+                  >
+                    Select {bestMatch.doctor.name}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Duration & Drug Allergies */}
@@ -732,8 +834,8 @@ export function ConsultDoctorView({
                   <span aria-hidden="true">·</span>
                   <span className="text-slate-500 dark:text-slate-400">
                     {profile.wellnessPassActive
-                      ? 'Semester Wellness Pass Rate'
-                      : 'Regular Night Consult (₹49 w/ Pass)'}
+                      ? 'Semester Wellness Pass Rate (50% Off)'
+                      : `Regular Night Consult (₹${selectedDoctor.passFee} w/ Wellness Pass)`}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -756,9 +858,9 @@ export function ConsultDoctorView({
 
               <motion.button
                 type="submit"
-                whileTap={shouldReduceMotion ? undefined : { scale: 0.96, y: 2 }}
+                whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
                 disabled={creatingConsult}
-                className="min-h-[48px] px-6 py-3 rounded-2xl bg-teal-600 hover:bg-teal-500 text-white text-sm font-bold border-b-[4px] border-teal-800 active:border-b-0 active:translate-y-[3px] flex items-center justify-center gap-2 whitespace-nowrap shadow-lg shadow-teal-600/20 disabled:opacity-60 transition-all"
+                className="min-h-[52px] px-6 py-3 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-sm sm:text-base font-bold flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-60 transition-colors"
               >
                 <Stethoscope className="w-4 h-4" />
                 <span>

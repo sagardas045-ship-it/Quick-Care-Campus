@@ -125,25 +125,25 @@ export function CheckoutForm({
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <div className="space-y-4">
-      {/* Cart Items Summary */}
-      <div className="space-y-2">
+    <div className="space-y-5">
+      {/* 1. Cart Items List */}
+      <div className="space-y-2.5">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Selected Relief Kits ({totalItems})
+          <h3 className="text-base font-bold text-[#0F172A] dark:text-slate-100">
+            Your Cart ({totalItems} {totalItems === 1 ? 'item' : 'items'})
           </h3>
           {cart.length > 0 && (
-            <div className="flex items-center gap-2.5">
-              <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
-                Est. gate arrival 16 mins
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 tabular-nums">
+                16 Min Delivery
               </span>
               {onClearCart && (
                 <button
                   type="button"
                   onClick={onClearCart}
-                  className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline underline-offset-2 rounded focus-visible:outline-2 focus-visible:outline-teal-600"
+                  className="min-h-[36px] px-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 underline underline-offset-2 rounded focus-visible:outline-2 focus-visible:outline-[#0D9488]"
                 >
-                  Clear Cart
+                  Clear
                 </button>
               )}
             </div>
@@ -151,37 +151,40 @@ export function CheckoutForm({
         </div>
 
         {cart.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/70 p-4 text-center">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Tap <span className="font-semibold text-slate-900 dark:text-slate-100">+ Add</span> on any OTC kit to begin your 60-second emergency checkout.
+          <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-[#F8FAFC] dark:bg-slate-900 p-5 text-center">
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
+              Tap <span className="font-bold text-[#0F172A] dark:text-white">+ ADD</span> on any OTC kit to start your express checkout.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-2xl border border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900">
             {cart.map(({ id, kit, quantity }) => (
-              <div key={id} className="flex items-center justify-between gap-3 p-3">
-                <div className="w-16 aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50/50 to-slate-100 dark:from-slate-800 dark:via-teal-950/40 dark:to-slate-900 border border-slate-200/70 dark:border-slate-700/70 shrink-0">
+              <div key={id} className="flex items-center justify-between gap-3 p-3.5">
+                <div className="w-16 aspect-[4/3] rounded-xl overflow-hidden bg-[#F8FAFC] dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 shrink-0">
                   <ProductPhoto product={kit} compact={true} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  <p className="text-sm sm:text-[15px] font-semibold text-[#0F172A] dark:text-slate-100 line-clamp-1">
                     {kit.name}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums mt-0.5">
-                    ₹{kit.price} × {quantity} = ₹{kit.price * quantity}
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-mono tabular-nums mt-0.5">
+                    ₹{kit.price} × {quantity} ={' '}
+                    <span className="font-bold text-[#0F172A] dark:text-white">
+                      ₹{kit.price * quantity}
+                    </span>
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center rounded-xl border border-[#0D9488] bg-teal-50/60 dark:bg-teal-950/40 overflow-hidden shrink-0">
                   <motion.button
                     type="button"
                     whileTap={reduceMotion ? undefined : { scale: 0.92 }}
                     onClick={() => onUpdateQuantity(kit.id, -1)}
                     aria-label={`Decrease quantity of ${kit.name}`}
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600"
+                    className="min-h-[44px] min-w-[40px] flex items-center justify-center text-[#0D9488] dark:text-teal-300 hover:bg-teal-100/70 dark:hover:bg-teal-900/50 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488]"
                   >
-                    <Minus className="w-4 h-4" />
+                    <Minus className="w-4 h-4 stroke-[2.5]" />
                   </motion.button>
-                  <span className="w-6 text-center text-sm font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
+                  <span className="w-7 text-center text-sm font-mono font-bold text-[#0F172A] dark:text-white tabular-nums">
                     {quantity}
                   </span>
                   <motion.button
@@ -189,9 +192,9 @@ export function CheckoutForm({
                     whileTap={reduceMotion ? undefined : { scale: 0.92 }}
                     onClick={() => onUpdateQuantity(kit.id, 1)}
                     aria-label={`Increase quantity of ${kit.name}`}
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus-visible:outline-2 focus-visible:outline-teal-600"
+                    className="min-h-[44px] min-w-[40px] flex items-center justify-center text-[#0D9488] dark:text-teal-300 hover:bg-teal-100/70 dark:hover:bg-teal-900/50 transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488]"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
                   </motion.button>
                 </div>
               </div>
@@ -200,259 +203,267 @@ export function CheckoutForm({
         )}
       </div>
 
-      {/* Auto-filled Verified Student Details & Map Pin */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 space-y-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-0.5">
-            <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-              {profile.displayName} ·{' '}
-              <span className="font-mono text-teal-700 dark:text-teal-400">{profile.phone}</span>
+      {/* 2. Hostel Gate Address & Verified Phone */}
+      <div className="rounded-2xl border border-[#E2E8F0] dark:border-slate-800 bg-[#F8FAFC] dark:bg-slate-900/70 p-4 space-y-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0">
+            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              Delivering to Hostel Gate
             </div>
-            <div className="text-xs text-slate-600 dark:text-slate-400">
+            <div className="text-base font-bold text-[#0F172A] dark:text-white leading-snug">
               {profile.hostelName}
             </div>
+            <div className="text-sm text-slate-600 dark:text-slate-300">
+              {profile.displayName} ·{' '}
+              <span className="font-mono font-semibold text-[#0D9488] dark:text-teal-300">
+                {profile.phone}
+              </span>
+            </div>
           </div>
+
           <motion.button
             type="button"
-            whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+            whileTap={reduceMotion ? undefined : { scale: 0.96 }}
             onClick={() => setShowPinAdjuster((prev) => !prev)}
-            className="min-h-[36px] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-teal-600 dark:hover:border-teal-500 text-xs font-semibold text-teal-700 dark:text-teal-300 flex items-center gap-1 shrink-0 transition-colors"
+            className="min-h-[44px] px-3 py-2 rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-[#0D9488] text-xs font-semibold text-[#0D9488] dark:text-teal-300 flex items-center gap-1.5 shrink-0 whitespace-nowrap transition-colors"
           >
-            <MapPin className="w-3.5 h-3.5" />
-            <span>{showPinAdjuster ? 'Hide Pin Map' : 'Adjust Gate Pin'}</span>
+            <MapPin className="w-4 h-4" />
+            <span>{showPinAdjuster ? 'Hide Map' : 'Adjust Pin'}</span>
           </motion.button>
         </div>
 
-        <div>
-          <label
-            htmlFor={roomInputId}
-            className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1"
-          >
-            Hostel Room / Wing
-          </label>
-          <input
-            id={roomInputId}
-            type="text"
-            value={roomNumber}
-            onChange={(e) => onRoomNumberChange(e.target.value)}
-            className="w-full min-h-[40px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
             <label
-              htmlFor={instructionsInputId}
-              className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400"
+              htmlFor={roomInputId}
+              className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5"
             >
-              Special Instructions{' '}
-              <span className="font-normal text-slate-400 dark:text-slate-500">
-                (Optional · Type or dictate)
-              </span>
+              Room / Wing Number
             </label>
-            <span className="text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500">
-              {specialInstructions.length}/240
-            </span>
-          </div>
-
-          <div className="relative">
-            <textarea
-              id={instructionsInputId}
-              rows={2}
-              maxLength={240}
-              value={specialInstructions}
-              onChange={(e) => onSpecialInstructionsChange(e.target.value.slice(0, 240))}
-              placeholder='e.g., "Leave at security gate" or tap the mic to speak'
-              className="w-full min-h-[68px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-3 pr-14 py-2 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-teal-600 dark:focus:border-teal-400 focus:outline-none resize-none"
+            <input
+              id={roomInputId}
+              type="text"
+              value={roomNumber}
+              onChange={(e) => onRoomNumberChange(e.target.value)}
+              placeholder="e.g., B-204"
+              className="w-full min-h-[44px] rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 text-base text-[#0F172A] dark:text-slate-100 focus:border-[#0D9488] dark:focus:border-teal-400 focus:outline-none"
             />
-            <motion.button
-              type="button"
-              whileTap={reduceMotion ? undefined : { scale: 0.94 }}
-              disabled={submitting || specialInstructions.length >= 240}
-              onClick={toggleDictation}
-              aria-pressed={isListening}
-              aria-label={
-                isListening
-                  ? 'Stop voice dictation'
-                  : 'Dictate special delivery instructions using microphone'
-              }
-              title={
-                !isDictationSupported
-                  ? 'Voice dictation is not supported in this browser'
-                  : isListening
-                  ? 'Tap to stop dictating'
-                  : 'Tap to dictate instructions'
-              }
-              className={`absolute right-1.5 bottom-1.5 min-h-[44px] min-w-[44px] rounded-lg border flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-teal-600 disabled:opacity-50 disabled:cursor-not-allowed ${
-                isListening
-                  ? 'bg-rose-600 hover:bg-rose-500 border-rose-700 text-white shadow-xs'
-                  : isMicRequesting
-                  ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
-                  : 'bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300'
-              }`}
-            >
-              {isMicRequesting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : isListening ? (
-                <MicOff className="w-4 h-4" />
-              ) : (
-                <Mic className="w-4 h-4" />
-              )}
-            </motion.button>
           </div>
 
-          {(isMicRequesting || isListening) && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50/80 dark:bg-teal-950/40 px-2.5 py-2 flex items-center justify-between gap-2 text-xs text-teal-900 dark:text-teal-200"
-            >
-              <div className="min-w-0 flex items-center gap-2">
-                <Mic className="w-3.5 h-3.5 text-teal-700 dark:text-teal-300 shrink-0" />
-                <span className="truncate">
-                  {isMicRequesting
-                    ? 'Requesting browser microphone access...'
-                    : interimTranscript
-                    ? `Hearing: "${interimTranscript}"`
-                    : 'Listening — speak your delivery instructions...'}
-                </span>
-              </div>
-              {isListening && (
-                <button
-                  type="button"
-                  onClick={stopDictation}
-                  className="px-2 py-1 rounded-md bg-white dark:bg-slate-800 border border-teal-200 dark:border-teal-700 text-[11px] font-semibold text-teal-800 dark:text-teal-200 hover:bg-teal-100/60 dark:hover:bg-slate-700 whitespace-nowrap shrink-0"
-                >
-                  Stop
-                </button>
-              )}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label
+                htmlFor={instructionsInputId}
+                className="block text-xs font-semibold text-slate-600 dark:text-slate-400"
+              >
+                Gate Note (Optional)
+              </label>
+              <span className="text-[11px] font-mono tabular-nums text-slate-400">
+                {specialInstructions.length}/240
+              </span>
             </div>
-          )}
-
-          {dictationError && (
-            <div
-              role="alert"
-              className="rounded-lg border border-rose-200 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-2 flex items-start justify-between gap-2 text-[11px] text-rose-800 dark:text-rose-200"
-            >
-              <div className="flex items-start gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-                <span>{dictationError}</span>
-              </div>
+            <div className="relative">
+              <input
+                id={instructionsInputId}
+                type="text"
+                maxLength={240}
+                value={specialInstructions}
+                onChange={(e) => onSpecialInstructionsChange(e.target.value.slice(0, 240))}
+                placeholder="Call on arrival / guard desk"
+                className="w-full min-h-[44px] rounded-xl border border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 pl-3.5 pr-12 text-sm text-[#0F172A] dark:text-slate-100 placeholder:text-slate-400 focus:border-[#0D9488] dark:focus:border-teal-400 focus:outline-none"
+              />
               <button
                 type="button"
-                onClick={clearDictationError}
-                aria-label="Dismiss microphone notice"
-                className="text-rose-600 dark:text-rose-300 hover:text-rose-900 dark:hover:text-white shrink-0"
+                disabled={submitting || specialInstructions.length >= 240}
+                onClick={toggleDictation}
+                aria-pressed={isListening}
+                aria-label={
+                  isListening
+                    ? 'Stop voice dictation'
+                    : 'Dictate delivery note using microphone'
+                }
+                title={
+                  !isDictationSupported
+                    ? 'Voice dictation unavailable in this browser'
+                    : isListening
+                    ? 'Stop dictating'
+                    : 'Dictate delivery note'
+                }
+                className={`absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] rounded-lg flex items-center justify-center transition-colors ${
+                  isListening
+                    ? 'bg-rose-600 text-white'
+                    : isMicRequesting
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'text-[#0D9488] dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-slate-700'
+                }`}
               >
-                <X className="w-3.5 h-3.5" />
+                {isMicRequesting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isListening ? (
+                  <MicOff className="w-4 h-4" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
               </button>
             </div>
-          )}
+          </div>
         </div>
 
+        {(isMicRequesting || isListening) && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/70 dark:bg-teal-950/40 px-3 py-2 flex items-center justify-between gap-2 text-xs text-teal-900 dark:text-teal-200"
+          >
+            <div className="min-w-0 flex items-center gap-2">
+              <Mic className="w-3.5 h-3.5 text-[#0D9488] shrink-0" />
+              <span className="truncate">
+                {isMicRequesting
+                  ? 'Requesting microphone access...'
+                  : interimTranscript
+                  ? `Hearing: "${interimTranscript}"`
+                  : 'Listening — speak your gate delivery note...'}
+              </span>
+            </div>
+            {isListening && (
+              <button
+                type="button"
+                onClick={stopDictation}
+                className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-teal-200 dark:border-teal-700 text-xs font-semibold text-teal-800 dark:text-teal-200 shrink-0"
+              >
+                Stop
+              </button>
+            )}
+          </div>
+        )}
+
+        {dictationError && (
+          <div
+            role="alert"
+            className="rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 px-3 py-2 flex items-start justify-between gap-2 text-xs text-rose-800 dark:text-rose-200"
+          >
+            <div className="flex items-start gap-1.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{dictationError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={clearDictationError}
+              aria-label="Dismiss microphone notice"
+              className="text-rose-600 hover:text-rose-900 shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {showPinAdjuster && (
-          <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+          <div className="pt-2 border-t border-[#E2E8F0] dark:border-slate-800">
             <HostelPinPickerMap
               pin={orderPin}
               onChangePin={onChangeOrderPin}
-              heightClass="h-[220px]"
+              heightClass="h-[210px]"
               isDarkMode={isDarkMode}
             />
           </div>
         )}
       </div>
 
-      {/* Semester Wellness Pass Toggle */}
+      {/* 3. Semester Wellness Pass */}
       {profile.wellnessPassActive ? (
-        <div className="rounded-xl border border-teal-200 dark:border-teal-800/70 bg-teal-50/70 dark:bg-teal-950/40 p-3 text-xs text-teal-900 dark:text-teal-200 font-medium">
-          Semester Wellness Pass Active — ₹0 Curfew Express delivery fee applied.
+        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200 font-medium">
+          Semester Wellness Pass active — ₹0 delivery fee applied.
         </div>
       ) : (
         <motion.button
           type="button"
-          whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+          whileTap={reduceMotion ? undefined : { scale: 0.99 }}
           onClick={onToggleWellnessPass}
           aria-pressed={wellnessPassAdded}
-          className={`w-full min-h-[52px] rounded-xl border p-3.5 text-left transition-colors flex items-start justify-between gap-3 focus-visible:outline-2 focus-visible:outline-teal-600 ${
+          className={`w-full min-h-[56px] rounded-2xl border p-4 text-left transition-colors flex items-start justify-between gap-3 focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
             wellnessPassAdded
-              ? 'border-teal-600 dark:border-teal-500 bg-teal-50/70 dark:bg-teal-950/40'
-              : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+              ? 'border-[#0D9488] bg-teal-50/60 dark:bg-teal-950/40'
+              : 'border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
           }`}
         >
           <div className="space-y-0.5">
-            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Add Semester Wellness Pass — ₹129/sem
+            <div className="text-sm sm:text-base font-bold text-[#0F172A] dark:text-slate-100">
+              Add Semester Wellness Pass — ₹129
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              Waives the ₹60 Curfew Express delivery fee on this and all future orders this semester.
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+              Get ₹0 delivery fee on this and all night orders this semester (saves ₹60 right now).
             </p>
           </div>
           <div
-            className={`w-6 h-6 rounded-md border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+            className={`w-6 h-6 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
               wellnessPassAdded
-                ? 'bg-teal-600 border-teal-600 text-white'
+                ? 'bg-[#0D9488] border-[#0D9488] text-white'
                 : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-transparent'
             }`}
           >
-            <Check className="w-4 h-4" />
+            <Check className="w-4 h-4 stroke-[2.5]" />
           </div>
         </motion.button>
       )}
 
-      {/* Transparent Pricing Breakdown */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 space-y-2 text-sm">
+      {/* 4. Bill & Delivery Fee Breakdown */}
+      <div className="rounded-2xl border border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-2.5 text-sm sm:text-base">
         <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-          <span>Item Subtotal</span>
-          <span className="font-mono tabular-nums text-slate-900 dark:text-slate-100">₹{subtotal}</span>
+          <span>Items Subtotal</span>
+          <span className="font-mono tabular-nums text-[#0F172A] dark:text-slate-100">
+            ₹{subtotal}
+          </span>
         </div>
         <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
-          <span>Curfew Express Delivery Fee</span>
+          <span>Night Gate Delivery Fee</span>
           {(profile.wellnessPassActive || wellnessPassAdded) && cart.length > 0 ? (
-            <span className="font-mono tabular-nums text-teal-700 dark:text-teal-400 font-semibold">
-              <span className="line-through text-slate-400 dark:text-slate-500 mr-1.5 font-normal">
+            <span className="font-mono tabular-nums text-[#0D9488] dark:text-teal-400 font-bold">
+              <span className="line-through text-slate-400 mr-1.5 font-normal">
                 ₹{DELIVERY_FEE}
               </span>
               ₹0
             </span>
           ) : (
-            <span className="font-mono tabular-nums text-slate-900 dark:text-slate-100">
+            <span className="font-mono tabular-nums text-[#0F172A] dark:text-slate-100">
               ₹{deliveryFee}
             </span>
           )}
         </div>
         {passCost > 0 && (
-          <div className="flex items-center justify-between text-teal-700 dark:text-teal-400">
+          <div className="flex items-center justify-between text-[#0D9488] dark:text-teal-400">
             <span>Semester Wellness Pass</span>
-            <span className="font-mono tabular-nums font-medium">₹{passCost}</span>
+            <span className="font-mono tabular-nums font-semibold">₹{passCost}</span>
           </div>
         )}
-        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between font-bold text-slate-900 dark:text-white text-base">
-          <span>Total Payable</span>
-          <span className="font-mono tabular-nums text-lg">₹{totalPayable}</span>
+        <div className="pt-3 border-t border-[#E2E8F0] dark:border-slate-800 flex items-center justify-between font-bold text-[#0F172A] dark:text-white text-base sm:text-lg">
+          <span>To Pay</span>
+          <span className="font-mono tabular-nums text-xl">₹{totalPayable}</span>
         </div>
       </div>
 
-      {/* One-Tap UPI Simulation */}
+      {/* 5. UPI Selection */}
       <div className="space-y-2">
-        <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-          One-Tap UPI Payment
+        <span className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+          Choose Instant UPI App
         </span>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2.5">
           {UPI_OPTIONS.map((option) => {
             const selected = upiProvider === option.id;
             return (
               <motion.button
                 key={option.id}
                 type="button"
-                whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+                whileTap={reduceMotion ? undefined : { scale: 0.96 }}
                 onClick={() => onSelectUpi(option.id)}
-                className={`min-h-[48px] rounded-2xl border px-2 py-2 text-center transition-all focus-visible:outline-2 focus-visible:outline-teal-600 ${
+                className={`min-h-[52px] rounded-xl border px-3 py-2 text-center transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488] ${
                   selected
-                    ? 'border-teal-600 dark:border-teal-500 border-b-[3px] border-b-teal-700 bg-teal-50 dark:bg-teal-950/50 text-teal-900 dark:text-teal-200 shadow-xs'
-                    : 'border-slate-200 dark:border-slate-700 border-b-[3px] border-b-slate-300 dark:border-b-slate-950 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700'
+                    ? 'border-[#0D9488] bg-teal-50/70 dark:bg-teal-950/50 text-[#0D9488] dark:text-teal-200'
+                    : 'border-[#E2E8F0] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-slate-300'
                 }`}
               >
-                <div className="text-sm font-bold leading-tight whitespace-nowrap">{option.label}</div>
+                <div className="text-sm font-bold leading-tight whitespace-nowrap">
+                  {option.label}
+                </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
                   {option.sub}
                 </div>
@@ -463,20 +474,20 @@ export function CheckoutForm({
       </div>
 
       {formError && (
-        <div className="rounded-xl border border-rose-200 dark:border-rose-800/70 bg-rose-50 dark:bg-rose-950/40 px-3.5 py-2.5 text-xs font-medium text-rose-800 dark:text-rose-200">
+        <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 px-4 py-3 text-sm font-medium text-rose-800 dark:text-rose-200">
           {formError}
         </div>
       )}
 
-      {/* Primary Tactile 3D Dispatch CTA */}
+      {/* 6. Primary Pay & Dispatch Button */}
       <motion.button
         type="button"
-        whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+        whileTap={reduceMotion ? undefined : { scale: 0.98 }}
         disabled={cart.length === 0 || submitting}
         onClick={onConfirmOrder}
-        className="w-full min-h-[54px] rounded-2xl bg-teal-600 hover:bg-teal-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:border-slate-400 dark:disabled:border-slate-700 disabled:cursor-not-allowed text-white font-semibold text-sm px-4 py-3 flex items-center justify-center gap-2 border-b-[4px] border-teal-800 active:border-b-0 active:translate-y-[3px] shadow-[0_10px_20px_-8px_rgba(13,148,136,0.5)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600"
+        className="w-full min-h-[54px] rounded-2xl bg-[#0D9488] hover:bg-teal-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold text-base px-5 py-3.5 flex items-center justify-center gap-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0D9488]"
       >
-        <MessageCircle className="w-4 h-4 shrink-0" />
+        <MessageCircle className="w-5 h-5 shrink-0" />
         <span className="whitespace-nowrap">
           {submitting
             ? 'Dispatching to 24/7 Pharmacy...'
@@ -484,11 +495,11 @@ export function CheckoutForm({
         </span>
       </motion.button>
 
-      {/* Safety Disclaimer */}
-      <div className="flex items-start gap-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/70 p-3 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-        <ShieldCheck className="w-4 h-4 text-teal-700 dark:text-teal-400 shrink-0 mt-0.5" />
+      {/* Quiet OTC Safety Note */}
+      <div className="flex items-start gap-2.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed pt-1">
+        <ShieldCheck className="w-4 h-4 text-[#0D9488] dark:text-teal-400 shrink-0 mt-0.5" />
         <p>
-          Strictly verified OTC essentials from licensed 24/7 partner pharmacies. No prescription-only drugs.
+          Verified sealed OTC essentials from licensed 24/7 partner pharmacies. No prescription-only drugs.
         </p>
       </div>
     </div>

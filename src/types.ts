@@ -142,11 +142,23 @@ export interface SharedTracker {
 
 export type ConsultationStatus = 'active' | 'prescribed' | 'completed';
 
+export type DoctorSpecialtyFilter =
+  | 'All Doctors'
+  | 'General Physician'
+  | 'Stomach & Digestion'
+  | "Women's Health"
+  | 'Skin & Allergy'
+  | 'ENT & Eye Care'
+  | 'Ortho & Sports Injury'
+  | 'Dental & Oral Care'
+  | 'Sleep & Stress Wellness';
+
 export interface DoctorProfile {
   id: string;
   name: string;
   qualification: string;
   specialty: string;
+  specialtyCategory: Exclude<DoctorSpecialtyFilter, 'All Doctors'>;
   nmcReg: string;
   focusSymptoms: string;
   languages: string[];
@@ -157,6 +169,7 @@ export interface DoctorProfile {
   baseFee: number;
   passFee: number;
   recommendedSymptomMatches: string[];
+  defaultRecommendedKitIds: string[];
 }
 
 export interface ConsultationMessage {

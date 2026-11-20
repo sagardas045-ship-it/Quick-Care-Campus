@@ -299,27 +299,31 @@ export function LiveTrackerView({
   if (!activeOrder) {
     return (
       <motion.div
-        initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
         animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-        className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 text-center space-y-4 shadow-sm"
+        className="max-w-xl mx-auto rounded-2xl border border-[#E2E8F0] dark:border-slate-800 bg-white dark:bg-slate-900 p-8 sm:p-10 text-center space-y-5"
       >
-        <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 flex items-center justify-center mx-auto">
-          <MapPin className="w-6 h-6" />
+        <div className="w-14 h-14 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-[#0D9488] dark:text-teal-300 flex items-center justify-center mx-auto">
+          <MapPin className="w-7 h-7" />
         </div>
-        <div className="space-y-1 max-w-md mx-auto">
-          <h1 className="text-lg font-bold text-slate-900 dark:text-white">No Active Night Order Yet</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Place an emergency OTC order from the storefront to watch your gate-authorized runner live on Google Maps.
+        <div className="space-y-2 max-w-md mx-auto">
+          <h1 className="text-xl font-bold text-[#0F172A] dark:text-white tracking-tight">
+            No active night delivery right now
+          </h1>
+          <p className="text-base text-slate-600 dark:text-slate-400 leading-relaxed">
+            When you order an OTC relief kit, your gate-authorized campus runner appears right here live on Google Maps with your 4-digit handover PIN.
           </p>
         </div>
-        <motion.button
-          type="button"
-          whileTap={reduceMotion ? undefined : { scale: 0.95 }}
-          onClick={onGoToOrder}
-          className="min-h-[44px] px-5 py-2.5 rounded-2xl bg-teal-600 hover:bg-teal-500 border-b-[3px] border-teal-800 text-white text-sm font-semibold transition-colors"
-        >
-          Browse Emergency Kits
-        </motion.button>
+        <div className="pt-1">
+          <motion.button
+            type="button"
+            whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+            onClick={onGoToOrder}
+            className="min-h-[48px] px-6 py-3 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-base font-bold transition-colors focus-visible:outline-2 focus-visible:outline-[#0D9488]"
+          >
+            Browse Emergency Kits
+          </motion.button>
+        </div>
       </motion.div>
     );
   }

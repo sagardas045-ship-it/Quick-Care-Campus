@@ -27,15 +27,24 @@ export const TRIAGE_CATALOG_SUMMARY: TriageCatalogEntry[] = [
   { id: 'kit-skin-rash', skuCode: 'QCC-015', name: 'Blister, Bruise & Mosquito Bite Relief', category: 'First-Aid & Sprains', price: 115, reliefFor: 'Blisters, bites & skin irritation' },
   { id: 'kit-pain-spray-combo', skuCode: 'QCC-016', name: 'Volini / Moov Instant Pain Relief Spray & Bandage Combo', category: 'First-Aid & Sprains', price: 135, reliefFor: 'Muscle spasm, neck stiffness & sprains' },
   { id: 'kit-dehydration', skuCode: 'QCC-017', name: 'Dehydration & Recovery Combo', category: 'Hydration & Energy', price: 75, reliefFor: 'Exhaustion, dizziness & fluid loss' },
+  { id: 'kit-study-hydration', skuCode: 'QCC-018', name: 'All-Nighter Study Hydration Box', category: 'Hydration & Energy', price: 90, reliefFor: 'Late-night exam prep without caffeine crash' },
+  { id: 'kit-fatigue-reset', skuCode: 'QCC-019', name: 'Morning Hangover & Fatigue Reset Kit', category: 'Hydration & Energy', price: 130, reliefFor: '8 AM grogginess, dehydration & low energy' },
   { id: 'kit-electral-ors-4pack', skuCode: 'QCC-020', name: '4-Pack Electral ORS & Lemon Electrolyte Blitz', category: 'Hydration & Energy', price: 85, reliefFor: 'Rapid electrolyte replacement after fever or vomiting' },
   { id: 'kit-period-care', skuCode: 'QCC-021', name: 'Period Care & Cramp Relief Box', category: 'Period & Cramp Care', price: 150, reliefFor: 'Discreet menstrual care & acute cramps' },
+  { id: 'kit-intimate-comfort', skuCode: 'QCC-022', name: 'Intimate Hygiene & Comfort Pack', category: 'Period & Cramp Care', price: 135, reliefFor: 'Overnight comfort, pH wipes & soothing warmth' },
+  { id: 'kit-heavy-flow', skuCode: 'QCC-023', name: 'Heavy Flow Overnight Protection Kit', category: 'Period & Cramp Care', price: 120, reliefFor: 'Leak-free overnight sleep & menstrual comfort' },
   { id: 'kit-overnight-pads-heatpad', skuCode: 'QCC-024', name: 'Whisper/Sofy XL Overnight Pads + Electric/Gel Heat Pad Refill', category: 'Period & Cramp Care', price: 160, reliefFor: 'Overnight leak protection & cramp warmth' },
   { id: 'kit-flu-hygiene', skuCode: 'QCC-025', name: 'Hostel Flu Protection & Hygiene Kit', category: 'Personal Hygiene & Masks', price: 80, reliefFor: 'Dorm flu protection & germ hygiene' },
   { id: 'kit-dental-ulcer', skuCode: 'QCC-026', name: 'Dental & Mouth Ulcer Emergency Pack', category: 'Personal Hygiene & Masks', price: 95, reliefFor: 'Mouth ulcers & midnight tooth sensitivity' },
+  { id: 'kit-lens-ear-care', skuCode: 'QCC-027', name: 'Contact Lens & Ear Care Essentials', category: 'Personal Hygiene & Masks', price: 130, reliefFor: 'Dry contact lenses & mild ear discomfort' },
+  { id: 'kit-washroom-hygiene-pouch', skuCode: 'QCC-028', name: 'Hostel Washroom & Travel Hygiene Emergency Pouch', category: 'Personal Hygiene & Masks', price: 75, reliefFor: 'Washroom sanitization & hygiene' },
   { id: 'kit-deep-sleep', skuCode: 'QCC-029', name: 'Hostel Noise & Deep Sleep Kit', category: 'Sleep & Wellness', price: 110, reliefFor: 'Loud corridors & restless insomnia' },
   { id: 'kit-calm-down', skuCode: 'QCC-030', name: 'Exam Anxiety & Calm Down Box', category: 'Sleep & Wellness', price: 125, reliefFor: 'Pre-viva stress & late-night tension' },
+  { id: 'kit-dry-skin-rescue', skuCode: 'QCC-031', name: 'Lip & Dry Weather Skin Rescue', category: 'Sleep & Wellness', price: 95, reliefFor: 'Chapped winter lips & dry skin barrier repair' },
+  { id: 'kit-melatonin-free-sleep', skuCode: 'QCC-032', name: 'Melatonin-Free Herbal Sleep & Eye Rest Kit', category: 'Sleep & Wellness', price: 115, reliefFor: 'Drug-free sleep aid & tired study eyes' },
   { id: 'kit-screen-eye-drops', skuCode: 'QCC-033', name: 'Late-Night Screen & Dust Eye Drop Relief Pack', category: 'Eye, Ear & Skin Care', price: 95, reliefFor: 'Dry, irritated or red eyes from screens' },
-  { id: 'kit-fungal-skin-rash', skuCode: 'QCC-034', name: 'Hostel Water Fungal & Skin Rash Care Kit', category: 'Eye, Ear & Skin Care', price: 110, reliefFor: 'Rashes, itching & skin irritation' },
+  { id: 'kit-fungal-skin-rash', skuCode: 'QCC-034', name: 'Hostel Water Fungal & Skin Rash Care Kit', category: 'Eye, Ear & Skin Care', price: 110, reliefFor: 'Rashes, itching & fungal skin irritation' },
+  { id: 'kit-lip-crack-winter', skuCode: 'QCC-035', name: 'Cold Sore, Lip Crack & Winter Dryness Rescue', category: 'Eye, Ear & Skin Care', price: 80, reliefFor: 'Cracked lips, cold sores & winter dryness' },
   { id: 'kit-ear-wax-swimmer', skuCode: 'QCC-036', name: "Ear Wax & Swimmer's Ear Relief Drops Pack", category: 'Eye, Ear & Skin Care', price: 90, reliefFor: 'Blocked ear & mild ear discomfort' },
   { id: 'kit-bandaid-20pack', skuCode: 'QCC-037', name: 'Band-Aid Washproof 20-Strip Pocket Box', category: 'Single Strip & Quick-Grab Essentials', price: 50, reliefFor: 'Quick cuts, shoe bites & scrapes' },
   { id: 'kit-eno-6sachet', skuCode: 'QCC-038', name: 'Eno Fruit Salt & Antacid 6-Sachet Emergency Pack', category: 'Single Strip & Quick-Grab Essentials', price: 55, reliefFor: 'Instant acidity, gas & bloating' },
@@ -100,6 +109,7 @@ export function buildDeterministicDoctorTriage(
     .join(' ')
     .toLowerCase();
 
+  const specialtyLower = (req.doctorSpecialty || '').toLowerCase();
   const allergyLower = (req.allergies || '').toLowerCase();
   const hasParacetamolAllergy =
     allergyLower.includes('paracetamol') ||
@@ -123,6 +133,112 @@ export function buildDeterministicDoctorTriage(
 
   const guidanceParts: string[] = [];
   const adviceParts: string[] = [];
+
+  if (
+    combinedText.includes('tooth') ||
+    combinedText.includes('ulcer') ||
+    combinedText.includes('gum') ||
+    combinedText.includes('dental') ||
+    combinedText.includes('chhale')
+  ) {
+    pushKit('kit-dental-ulcer');
+    if (!hasNsaidAllergy && !hasParacetamolAllergy) {
+      pushKit('kit-headache-acidity');
+    } else {
+      pushKit('kit-cooling-gel-patches');
+    }
+    guidanceParts.push(
+      'Apply a thin layer of oral ulcer gel on clean dry mucosa before sleep and brush gently with desensitizing paste.'
+    );
+    adviceParts.push(
+      'Do a warm salt-water rinse for 30 seconds after eating and avoid very hot, spicy, or acidic foods tonight.'
+    );
+  }
+
+  if (
+    combinedText.includes('sprain') ||
+    combinedText.includes('ankle') ||
+    combinedText.includes('stair') ||
+    combinedText.includes('back') ||
+    combinedText.includes('muscle') ||
+    combinedText.includes('twist')
+  ) {
+    pushKit('kit-sports-sprain');
+    pushKit('kit-pain-spray-combo');
+    guidanceParts.push(
+      'Spray pain-relief mist from 15cm away up to 3x daily (not on open cuts) and apply elastic crepe wrap snug—never too tight.'
+    );
+    adviceParts.push(
+      'Follow R.I.C.E.: Rest weight off the joint, Ice pack wrapped in cloth 15 mins every 2 hours, Compression wrap, and Elevate ankle on a pillow.'
+    );
+  }
+
+  if (
+    combinedText.includes('rash') ||
+    combinedText.includes('fungal') ||
+    combinedText.includes('allergy') ||
+    combinedText.includes('itch') ||
+    combinedText.includes('mosquito') ||
+    combinedText.includes('blister') ||
+    combinedText.includes('burn')
+  ) {
+    if (combinedText.includes('burn') || combinedText.includes('cut')) {
+      pushKit('kit-first-aid');
+      pushKit('kit-savlon-cotton-mini');
+      guidanceParts.push(
+        'Cool minor burn under running tap water for 10 mins first, then apply silver burn gel thinly.'
+      );
+    } else {
+      pushKit('kit-fungal-skin-rash');
+      pushKit('kit-skin-rash');
+      guidanceParts.push(
+        'Keep skin dry after showering and apply antifungal dusting powder or calamine lotion gently 2–3x daily.'
+      );
+    }
+    adviceParts.push('Wear loose breathable cotton clothes and avoid scratching or tight wet socks.');
+  }
+
+  if (
+    combinedText.includes('eye') ||
+    combinedText.includes('lens') ||
+    combinedText.includes('ear') ||
+    combinedText.includes('sinus') ||
+    combinedText.includes('blocked nose')
+  ) {
+    if (combinedText.includes('ear')) {
+      pushKit('kit-ear-wax-swimmer');
+      pushKit('kit-lens-ear-care');
+      guidanceParts.push(
+        'Instill 2–3 soothing ear drops only if there is no fluid/pus discharge or eardrum perforation history.'
+      );
+    }
+    if (combinedText.includes('eye') || combinedText.includes('lens') || combinedText.includes('sinus')) {
+      pushKit('kit-screen-eye-drops');
+      pushKit('kit-sinus-eyecare');
+      guidanceParts.push(
+        'Use 1–2 sterile lubricating eye drops per eye every 4–6 hours; remove contact lenses until irritation clears.'
+      );
+    }
+    adviceParts.push('Follow the 20-20-20 screen rule and avoid poking cotton buds deep into the ear canal.');
+  }
+
+  if (
+    combinedText.includes('anxiety') ||
+    combinedText.includes('panic') ||
+    combinedText.includes('insomnia') ||
+    combinedText.includes('sleep') ||
+    combinedText.includes('fatigue')
+  ) {
+    pushKit('kit-calm-down');
+    pushKit('kit-melatonin-free-sleep');
+    pushKit('kit-deep-sleep');
+    guidanceParts.push(
+      'Brew warm chamomile tea 30 mins before bed, put on the self-warming eye mask, and use acoustic earplugs for hostel noise.'
+    );
+    adviceParts.push(
+      'Try 4-7-8 slow paced breathing for 3 minutes and step away from exam screens for a 20-minute wind-down.'
+    );
+  }
 
   if (
     combinedText.includes('fever') ||
@@ -155,6 +271,7 @@ export function buildDeterministicDoctorTriage(
     combinedText.includes('nasal')
   ) {
     pushKit('kit-cough-soother');
+    pushKit('kit-strepsils-16drop');
     pushKit('kit-steam-nasal');
     guidanceParts.push(
       'Throat lozenges 1 pc every 4 hours as needed + warm saline gargle before sleep.'
@@ -206,51 +323,14 @@ export function buildDeterministicDoctorTriage(
     adviceParts.push('Dim laptop/phone screens and rest eyes for at least 30 minutes.');
   }
 
-  if (
-    combinedText.includes('period') ||
-    combinedText.includes('menstrual')
-  ) {
+  if (combinedText.includes('period') || combinedText.includes('menstrual') || combinedText.includes('uti')) {
     pushKit('kit-period-care');
     pushKit('kit-overnight-pads-heatpad');
+    pushKit('kit-intimate-comfort');
     guidanceParts.push(
-      'Apply the self-warming heat patch over lower abdomen for 20–30 mins; hydrate well.'
+      'Apply the self-warming heat patch over lower abdomen for 20–30 mins; hydrate with warm water.'
     );
-    adviceParts.push('Rest with knees slightly elevated to ease lower pelvic muscle spasm.');
-  }
-
-  if (
-    combinedText.includes('allergy') ||
-    combinedText.includes('rash') ||
-    combinedText.includes('itch')
-  ) {
-    pushKit('kit-fungal-skin-rash');
-    pushKit('kit-skin-rash');
-    guidanceParts.push(
-      'Apply calamine lotion thinly over affected itchy skin 2–3 times nightly; keep area dry.'
-    );
-    adviceParts.push('Wear loose cotton clothing and avoid scratching or perfumed soaps.');
-  }
-
-  if (
-    combinedText.includes('sprain') ||
-    combinedText.includes('cut') ||
-    combinedText.includes('burn') ||
-    combinedText.includes('ankle')
-  ) {
-    if (combinedText.includes('cut') || combinedText.includes('burn')) {
-      pushKit('kit-first-aid');
-      pushKit('kit-savlon-cotton-mini');
-      guidanceParts.push(
-        'Clean gently with diluted antiseptic solution and cover with sterile non-stick gauze.'
-      );
-    } else {
-      pushKit('kit-sports-sprain');
-      pushKit('kit-pain-spray-combo');
-      guidanceParts.push(
-        'Apply RICE protocol (Rest, Ice pack 15 mins, Compression crepe wrap, Elevation).'
-      );
-    }
-    adviceParts.push('Avoid putting weight on an acutely swollen ankle until evaluated.');
+    adviceParts.push('Rest with knees slightly elevated to ease pelvic muscle spasm.');
   }
 
   if (
@@ -260,18 +340,38 @@ export function buildDeterministicDoctorTriage(
   ) {
     pushKit('kit-dehydration');
     pushKit('kit-electral-ors-4pack');
-    guidanceParts.push(
-      'Prepare Electral ORS as directed and sip slowly over 1–2 hours.'
-    );
+    guidanceParts.push('Prepare Electral ORS as directed and sip slowly over 1–2 hours.');
     adviceParts.push('Sit or lie down immediately if lightheaded and loosen tight collars.');
   }
 
+  // Specialist fallback if free-text matched no keywords
   if (pickedIds.length === 0) {
-    pushKit('kit-fever-flu');
-    pushKit('kit-dehydration');
-    guidanceParts.push(
-      'Supportive hydration with ORS and temperature monitoring every 4 hours.'
-    );
+    if (specialtyLower.includes('orthoped')) {
+      pushKit('kit-sports-sprain');
+      pushKit('kit-pain-spray-combo');
+    } else if (specialtyLower.includes('dermat')) {
+      pushKit('kit-fungal-skin-rash');
+      pushKit('kit-skin-rash');
+    } else if (specialtyLower.includes('ent') || specialtyLower.includes('ophthalm')) {
+      pushKit('kit-screen-eye-drops');
+      pushKit('kit-ear-wax-swimmer');
+    } else if (specialtyLower.includes('dental')) {
+      pushKit('kit-dental-ulcer');
+      pushKit('kit-headache-acidity');
+    } else if (specialtyLower.includes('sleep') || specialtyLower.includes('stress')) {
+      pushKit('kit-calm-down');
+      pushKit('kit-melatonin-free-sleep');
+    } else if (specialtyLower.includes('gynecol') || specialtyLower.includes('women')) {
+      pushKit('kit-period-care');
+      pushKit('kit-intimate-comfort');
+    } else if (specialtyLower.includes('internal')) {
+      pushKit('kit-canteen-acidity');
+      pushKit('kit-electral-ors-4pack');
+    } else {
+      pushKit('kit-fever-flu');
+      pushKit('kit-dehydration');
+    }
+    guidanceParts.push('Follow enclosed OTC kit instructions carefully and monitor how you feel tonight.');
     adviceParts.push('Rest in your hostel room and message again if new symptoms appear.');
   }
 
@@ -285,25 +385,40 @@ export function buildDeterministicDoctorTriage(
   const latestStudentText =
     req.messages.filter((m) => m.sender === 'student').slice(-1)[0]?.text ?? '';
 
+  let clarifyingQuestion = 'Can you tell me if the pain or discomfort is worsening rapidly right now?';
+  if (specialtyLower.includes('orthoped')) {
+    clarifyingQuestion = 'Are you able to bear weight on the joint, and do you see visible swelling or bruising?';
+  } else if (specialtyLower.includes('dental')) {
+    clarifyingQuestion = 'Is there cheek/jaw swelling or pain triggered by hot or cold liquids?';
+  } else if (specialtyLower.includes('dermat')) {
+    clarifyingQuestion = 'Is the rash spreading rapidly, oozing, or accompanied by lip/throat swelling?';
+  } else if (specialtyLower.includes('ent') || specialtyLower.includes('ophthalm')) {
+    clarifyingQuestion = 'Are you experiencing blurred vision, pus discharge, or severe throbbing inside the ear?';
+  } else if (specialtyLower.includes('sleep') || specialtyLower.includes('stress')) {
+    clarifyingQuestion = 'Have you had heavy caffeine or energy drinks tonight, and are you feeling shortness of breath?';
+  } else if (specialtyLower.includes('gynecol') || specialtyLower.includes('women')) {
+    clarifyingQuestion = 'Are you experiencing burning urination, high fever, or dizziness with the cramps?';
+  }
+
   const isFollowUp = studentMessagesCount > 1;
   const replyText = isFollowUp
-    ? `Thank you for the update, ${req.studentName}. ${
+    ? `Thank you for sharing that update, ${req.studentName}. ${
         latestStudentText.toLowerCase().includes('yes') ||
         latestStudentText.toLowerCase().includes('no')
           ? 'Noted clearly in your clinical chart.'
-          : 'I have reviewed these details carefully.'
-      } I have updated your OTC care guidance and prescription card below (${guidanceParts[0] || 'supportive hydration & rest'}). Please tap "+ Add Recommended Items to Cart" if you want immediate gate delivery, and alert the hostel warden or visit the campus infirmary immediately if you develop red-flag symptoms.`
-    : `Hello ${req.studentName}, I am ${req.doctorName} (${req.doctorNmcReg}). I reviewed your triage for ${req.symptoms.join(', ')} (${req.duration}). To confirm safety: have you checked your current temperature or noticed any dizziness when standing? Meanwhile, I have prepared your OTC prescription card below based on your allergy check (${req.allergies || 'None declared'}).`;
+          : 'I have reviewed your update carefully.'
+      } I have updated your OTC care guidance and prescription card below (${guidanceParts[0] || 'supportive first-aid & rest'}). Tap "+ Add Recommended Items to Cart" if you want immediate gate delivery, and visit the campus infirmary immediately if any red-flag signs appear.`
+    : `Hello ${req.studentName}, I am ${req.doctorName} (${req.doctorNmcReg}). I reviewed your triage for ${req.symptoms.join(', ')} (${req.duration}). Quick safety check: ${clarifyingQuestion} Meanwhile, I have prepared your Digital Prescription Card below after checking your allergies (${req.allergies || 'None declared'}).`;
 
   return {
     replyText,
     issuePrescription: true,
     prescription: {
-      diagnosisSummary: `Acute symptomatic hostel triage: ${req.symptoms.join(', ')} (${req.duration})`,
+      diagnosisSummary: `Specialist triage (${req.doctorSpecialty}): ${req.symptoms.join(', ')} (${req.duration})`,
       dosageGuidance: guidanceParts.join(' '),
       firstAidAdvice: adviceParts.join(' '),
       redFlagWarning:
-        'Seek urgent campus infirmary / ER care immediately if fever exceeds 103°F, breathing becomes difficult, pain turns severe/unrelenting, vomiting prevents keeping liquids down, or dizziness worsens.',
+        'Seek urgent campus infirmary / ER care immediately if fever exceeds 103°F, breathing/swallowing becomes difficult, severe swelling or inability to bear weight occurs, vision blurs, or vomiting prevents keeping liquids down.',
       allergyCheckNote: allergyText,
       recommendedKitIds: finalIds,
       issuedBy: req.doctorName,
